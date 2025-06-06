@@ -88,8 +88,6 @@ jobs:
           key: ${{ runner.os }}-${{ github.repository }}-${{ matrix.FEIL }}
           restore-keys: |
             ${{ runner.os }}-${{ github.repository }}-${{ matrix.FEIL }}-
-            ${{ runner.os }}-${{ github.repository }}-${{ matrix.FEIL }}-
-            ${{ runner.os }}-${{ github.repository }}-
             ${{ runner.os }}-
             
        # 4. 设置 ccache 环境变量  

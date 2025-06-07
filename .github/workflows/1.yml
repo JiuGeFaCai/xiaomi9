@@ -15,6 +15,12 @@ on:
         description: "自定义内核后缀 (留空则使用随机字符串)"
         required: false
         default: ""
+      cibuild:
+        type: string
+        description: "ci版本"
+        required: false
+        default: ""
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -175,7 +181,7 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
+         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}-${{ github.event.inputs.cibuild }}
          path: ./AnyKernel3/*
          
       - name: Upload Image

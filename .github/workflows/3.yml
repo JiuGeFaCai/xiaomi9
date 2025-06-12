@@ -44,6 +44,11 @@ on:
        required: false
        default: false
        type: boolean
+      enable_kpm:
+       description: "是否支持kpm"
+       required: false
+       default: true
+       type: boolean
 
 jobs:
   build:

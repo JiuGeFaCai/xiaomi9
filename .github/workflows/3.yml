@@ -25,7 +25,7 @@ on:
         default: '-android15-8-g013ec21bba94-abogki383916444'
         options:
           - -android15-8-g013ec21bba94-abogki383916444-byKUAN@ITXUU
-          - -android15-8-g013ec21bba94-abogki383916444-by酷安@ITXUU
+          - -android15-8-g8888888-abogki888-by酷安@ITXUU
           - -android15-8-g013ec21bba94-abogki383916444
       BUILD_RUN:
         type: choice

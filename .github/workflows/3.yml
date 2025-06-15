@@ -45,6 +45,11 @@ on:
        required: false
        default: false
        type: boolean
+      enable_lto:
+       description: "是否启用lto编译"
+       required: false
+       default: false
+       type: boolean
 
 jobs:
   build:
@@ -225,6 +230,13 @@ jobs:
          cp -r ./sched_ext/* ./common/kernel/sched
          rm -rf ./sched_ext/.git
          fi
+
+      - name: use LTO=thin
+        if: ${{inputs.enable_lto }}
+        run: |
+         cd kernel_workspace/kernel_platform
+         echo "CONFIG_LTO_CLANG=y" >> ./common/arch/arm64/configs/gki_defconfig
+         echo "CONFIG_LTO_CLANG_THIN=y" >> ./common/arch/arm64/configs/gki_defconfig
 
       - name: Build kernel
         run: |

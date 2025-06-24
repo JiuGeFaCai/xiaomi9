@@ -2,6 +2,10 @@ name: GKI Build SuKiSu SUSFS
 on:
   workflow_dispatch:
     inputs:
+      ci_VERSION:
+        description: "谷歌ci版本"
+        required: true
+        default: ''
       ANDROID_VERSION:
         description: "内核安卓版本"
         required: true
@@ -79,7 +83,7 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://github.com/JiuGeFaCai/repo.git -m manifest.xml --depth=1
+         repo init -u https://android.googlesource.com/kernel/manifest -b ${{ github.event.inputs.ci_VERSION }} --depth=1
          repo --trace sync -c -j$(nproc --all) --no-tags
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          

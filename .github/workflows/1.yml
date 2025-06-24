@@ -142,6 +142,7 @@ jobs:
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
+          sed -i '/"protected_exports_list": "android\/abi_gki_protected_exports_aarch64"/d' BUILD.bazel 
           git add -A && git commit -a -m "BUILD Kernel"
 
       - name: Add make name

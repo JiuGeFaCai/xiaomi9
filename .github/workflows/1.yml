@@ -83,7 +83,7 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://android.googlesource.com/kernel/manifest -b ${{ github.event.inputs.ci_VERSION }} --depth=1
+         repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.ci_VERSION }} --depth=1
          repo --trace sync -c -j$(nproc --all) --no-tags
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          

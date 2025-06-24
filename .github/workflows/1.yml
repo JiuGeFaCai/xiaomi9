@@ -83,8 +83,18 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.ci_VERSION }} --depth=1
+         export REPO_URL='https://mirrors.tuna.tsinghua.edu.cn/git/git-repo'
+         repo init --depth=1 --u https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/kernel/manifest -b common-${{ github.event.inputs.ci_VERSION }} --repo-rev=v2.16
+         REMOTE_BRANCH=$(git ls-remote https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/kernel/common ${{ github.event.inputs.ci_VERSION }})
+         DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+         if grep -q deprecated <<< $REMOTE_BRANCH; then
+         echo "Found deprecated branch: ${{ github.event.inputs.ci_VERSION }}"
+         sed -i 's/"'${{ github.event.inputs.ci_VERSION }}'"/"deprecated\/'${{ github.event.inputs.ci_VERSION }}'"/g' $DEFAULT_MANIFEST_PATH
+         cat $DEFAULT_MANIFEST_PATH
+         fi
+         repo --version
          repo --trace sync -c -j$(nproc --all) --no-tags
+
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          
       - name: Set up SukiSU

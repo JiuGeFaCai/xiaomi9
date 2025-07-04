@@ -67,6 +67,9 @@ jobs:
         with:
           path: /home/runner/.ccache
           key: ${{ runner.os }}-${{ github.repository }}-${{ github.event.inputs.ci_VERSION }}-v2
+          restore-keys: |
+            ${{ runner.os }}-${{ github.event.inputs.ci_VERSION }}-v2
+            ${{ runner.os }}-
         
       # 4. 设置 ccache 环境变量  
       - name: Setup ccache environment  

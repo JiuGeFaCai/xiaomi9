@@ -66,9 +66,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: /home/runner/.ccache
-          key: ${{ runner.os }}-${{ github.repository }}-${{ github.event.inputs.ci_VERSION }}-v2
+          key: ${{ runner.os }}-${{ github.repository }}-${{ github.event.inputs.ci_VERSION }}
           restore-keys: |
-            ${{ runner.os }}-${{ github.event.inputs.ci_VERSION }}-v2
+            ${{ runner.os }}-${{ github.repository }}-${{ github.event.inputs.ci_VERSION }}-
             ${{ runner.os }}-
         
       # 4. 设置 ccache 环境变量  

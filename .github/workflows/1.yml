@@ -24,6 +24,10 @@ on:
         description: "ci版本"
         required: false
         default: ""
+      sukisu_tag:
+        description: "自定义版本来源后缀（如:见清）"
+        required: false
+        default: "闲鱼(搞机英雄)"
 
 jobs:
   build:
@@ -101,7 +105,16 @@ jobs:
         run: |
          cd kernel_workspace
          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
-         cd ./KernelSU
+         cd KernelSU
+         # 获取自定义后缀（如：见清）
+         TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
+         # 使用正确变量名 KSU_VERSION_API 替换函数体
+         sed -i "/^define get_ksu_version_full$/,/^endef$/c\
+         define get_ksu_version_full\\
+         v\$(KSU_VERSION_API)-sukisu-\$(KSU_VERSION)-by-$TAG_SUFFIX\\
+         endef" kernel/Makefile
+         echo "✅ Injected custom version: v\$(KSU_VERSION_API)-sukisu-\$(KSU_VERSION)-by-$TAG_SUFFIX"
+
          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10700)
          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
          

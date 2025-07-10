@@ -33,7 +33,7 @@ on:
         required: true
         default: false
       sukisu_tag:
-        description: "自定义版本来源后缀（如:见清）"
+        description: "自定义版本来源后缀"
         required: false
         default: "闲鱼(搞机英雄)"
 

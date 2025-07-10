@@ -53,7 +53,7 @@ on:
       sukisu_tag:
         description: "自定义版本来源后缀"
         required: false
-        default: "闲鱼(搞机英雄)"
+        default: "闲鱼-搞机英雄-禁止倒卖"
 
 jobs:
   build:

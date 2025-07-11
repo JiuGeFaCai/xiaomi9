@@ -100,6 +100,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ github.repository }}-${{ matrix.FEIL }}-
             ${{ runner.os }}-
+            ccache-
             
        # 4. 设置 ccache 环境变量  
       - name: Setup ccache environment
@@ -138,7 +139,6 @@ jobs:
          cd kernel_workspace/kernel_platform
          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
          cd KernelSU
-         # 获取自定义后缀（如：见清）
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
          # 使用正确变量名 KSU_VERSION_API 替换函数体
          sed -i "/^define get_ksu_version_full$/,/^endef$/c\

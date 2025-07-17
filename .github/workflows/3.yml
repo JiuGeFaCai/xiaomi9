@@ -59,7 +59,7 @@ jobs:
   build:
     strategy:
       matrix:
-        FEIL: ["oneplus_13_v", "oneplus_ace5_pro_v", "oneplus_13t", "oneplus_pad2_pro_v", "oneplus_ace5_ultra_v"]
+        FEIL: ["oneplus_13_v", "oneplus_ace5_pro_v", "oneplus_13t", "oneplus_pad2_pro_v", "oneplus_ace5_ultra_v", "oneplus_sm8750"]
             
     runs-on: ${{ github.event.inputs.BUILD_RUN }}
     env:
@@ -171,7 +171,7 @@ jobs:
            cp ../sturdy-journey/fix.patch ./common/
            cd ./common
 
-           if [ "${{ matrix.FEIL }}" != "oneplus_13t" ] && [ "${{ matrix.FEIL }}" != "oneplus_ace5_ultra_v" ] && [ "${{ matrix.FEIL }}" != "oneplus_pad2_pro_v" ]; then
+           if [ "${{ matrix.FEIL }}" != "oneplus_13t" ] && [ "${{ matrix.FEIL }}" != "oneplus_ace5_ultra_v" ] && [ "${{ matrix.FEIL }}" != "oneplus_pad2_pro_v" ] && [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
            sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
            sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
            fi

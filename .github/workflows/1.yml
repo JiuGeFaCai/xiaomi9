@@ -28,6 +28,11 @@ on:
         description: "自定义版本来源后缀"
         required: false
         default: "闲鱼-搞机英雄-禁止倒卖"
+      enable_patch:
+       description: "是否启用6.6.30补丁"
+       required: false
+       default: false
+       type: boolean
 
 jobs:
   build:
@@ -130,6 +135,10 @@ jobs:
 
            # Apply patches
            cd ./common
+           if ${{inputs.enable_patch }}; then
+           sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
+           sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
+           fi
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
            # cp ../kernel_patches/69_hide_stuff.patch ./
            cp ../SukiSU_patch/hooks/syscall_hooks.patch ./

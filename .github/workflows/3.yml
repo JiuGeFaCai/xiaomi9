@@ -54,6 +54,7 @@ on:
         description: "自定义版本来源后缀"
         required: false
         default: "闲鱼-搞机英雄-禁止倒卖"
+        
 
 jobs:
   build:
@@ -257,9 +258,9 @@ jobs:
 
       - name: Build kernel
         run: |
-          export KBUILD_BUILD_TIMESTAMP="Tue Dec 17 23:36:49 UTC 2024"      
+          export KBUILD_BUILD_TIMESTAMP="Tue Dec 17 23:36:49 UTC 2024"
           if [ "${{ matrix.FEIL }}" = "oneplus_13t" ]; then
-          export KBUILD_BUILD_TIMESTAMP="Tue Jan 20 03:24:58 UTC 2025"         
+          export KBUILD_BUILD_TIMESTAMP="Tue Jan 20 03:24:58 UTC 2025"
           fi
 
           export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"

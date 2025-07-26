@@ -19,6 +19,11 @@ on:
         description: "自定义内核后缀 (留空则使用随机字符串)"
         required: false
         default: ""
+      BUILD_TIME:
+        type: string
+        description: "自定义构建时间"
+        required: false
+        default: ""
       cibuild:
         type: string
         description: "ci版本"
@@ -163,6 +168,11 @@ jobs:
         run: |
          cd kernel_workspace
          sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
+
+      - name: BUILD TIME
+        if: ${{ github.event.inputs.BUILD_TIME != '' }}
+        run: |
+         export KBUILD_BUILD_TIMESTAMP="${{ github.event.inputs.BUILD_TIME }}"
                           
       - name: Build kernel
         run: |
@@ -172,7 +182,7 @@ jobs:
          else
            tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
          fi
-           
+
       - name: Make AnyKernel3
         run: |
          OUTDIR=kernel_workspace/out/${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}/dist

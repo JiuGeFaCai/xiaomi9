@@ -61,29 +61,7 @@ jobs:
         run: |
          sudo apt update && sudo apt upgrade -y
          sudo apt install -y curl ccache git python3 repo libelf-dev
-
-      - name: Restore ccache
-        uses: actions/cache@v3
-        with:
-          path: /home/runner/.ccache
-          key: ${{ runner.os }}-${{ github.repository }}-${{ github.event.inputs.ci_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-${{ github.repository }}-${{ github.event.inputs.ci_VERSION }}-
-            ${{ runner.os }}-
-            ccache-
         
-      # 4. 设置 ccache 环境变量  
-      - name: Setup ccache environment  
-        run: |  
-         echo "CCACHE_DIR=/home/runner/.ccache" >> $GITHUB_ENV  
-         echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV  
-         echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion" >> $GITHUB_ENV  
-         echo "CCACHE_NOHASHDIR=true" >> $GITHUB_ENV  
-         echo "CCACHE_HARDLINK=true" >> $GITHUB_ENV  
-         echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV  
-         echo "CCACHE_LOGFILE=${{ github.workspace }}/ccache.log" >> $GITHUB_ENV  
-         echo "/usr/lib/ccache" >> $GITHUB_PATH
-
       - name: Install repo tool
         run: |
          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
@@ -190,15 +168,11 @@ jobs:
         run: |
          cd kernel_workspace
          if [ -e build/build.sh ]; then
-           LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
+           LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
          else
            tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
          fi
-
-      # 6. 打印 ccache 使用统计
-      - name: Show ccache stats
-        run: ccache -s || true
-        
+           
       - name: Make AnyKernel3
         run: |
          OUTDIR=kernel_workspace/out/${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}/dist

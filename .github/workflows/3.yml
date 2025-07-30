@@ -90,7 +90,7 @@ jobs:
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         run: |
          sudo apt update && sudo apt upgrade -y
-         sudo apt install -y python3 git curl ccache libelf-dev
+         sudo apt install -y python3 git curl ccache libelf-dev aria2
 
       - name: Restore ccache
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
@@ -137,8 +137,9 @@ jobs:
 
          cd kernel_platform/prebuilts/clang/host/linux-x86/
          mkdir clang-r536225
-         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
+         aria2c -x 16 -s 16 -k 1M "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz"
          tar xf clang-r536225.tar.gz
+         ls -l clang-r536225.tar.gz
          rm -rf clang-r536225.tar.gz
          
       - name: Set up SukiSU
@@ -280,6 +281,8 @@ jobs:
           fi
 
           cd kernel_workspace/kernel_platform/common
+
+          clang -v
 
           if [ "${{ github.event.inputs.enable_o2 }}" = "true" ]; then
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC='ccache clang' RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld  HOSTLD=ld.lld O=out KCFLAGS+=-O2 gki_defconfig all

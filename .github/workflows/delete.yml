@@ -20,7 +20,7 @@ on:
       count:
         description: '最多清理的运行次数'
         required: false
-        default: '20'
+        default: '50'
       delete_failed:
         description: '删除失败的运行记录？'
         required: false

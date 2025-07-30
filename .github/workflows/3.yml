@@ -256,14 +256,7 @@ jobs:
          echo "CONFIG_LTO_CLANG=y" >> ./common/arch/arm64/configs/gki_defconfig
          echo "CONFIG_LTO_CLANG_THIN=y" >> ./common/arch/arm64/configs/gki_defconfig
       
-      - name: wget clang-r536225
-        run: |
-          cd $GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/
-          mkdir clang-r536225
-          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
-          tar xf clang-r536225.tar.gz
-          ls -l clang-r536225.tar.gz
-          rm -rf clang-r536225.tar.gz
+      
          
 
       - name: Build kernel
@@ -274,7 +267,7 @@ jobs:
           fi
 
           
-          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r536225/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
           export PATH="/usr/lib/ccache:$PATH"
           
           # 设置 AFDO 配置文件路径

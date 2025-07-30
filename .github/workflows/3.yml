@@ -134,6 +134,12 @@ jobs:
          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+         cd kernel_platform/prebuilts/clang/host/linux-x86/
+         mkdir clang-r536225
+         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz
+         tar xf clang-r536225.tar.gz
+         rm -rf clang-r536225.tar.gz
          
       - name: Set up SukiSU
         run: |
@@ -263,7 +269,7 @@ jobs:
           export KBUILD_BUILD_TIMESTAMP="Tue Jan 20 03:24:58 UTC 2025"
           fi
 
-          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r536225/bin:$PATH"
           export PATH="/usr/lib/ccache:$PATH"
           
           # 设置 AFDO 配置文件路径

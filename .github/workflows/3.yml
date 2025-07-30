@@ -135,13 +135,6 @@ jobs:
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
 
-         cd kernel_platform/prebuilts/clang/host/linux-x86/
-         mkdir clang-r536225
-         aria2c -x 16 -s 16 -k 1M "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz"
-         tar xf clang-r536225.tar.gz
-         ls -l clang-r536225.tar.gz
-         rm -rf clang-r536225.tar.gz
-         
       - name: Set up SukiSU
         run: |
          cd kernel_workspace/kernel_platform
@@ -262,6 +255,16 @@ jobs:
          cd kernel_workspace/kernel_platform
          echo "CONFIG_LTO_CLANG=y" >> ./common/arch/arm64/configs/gki_defconfig
          echo "CONFIG_LTO_CLANG_THIN=y" >> ./common/arch/arm64/configs/gki_defconfig
+      
+      - name: wget clang-r536225
+        run: |
+          cd $GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/
+          mkdir clang-r536225
+          aria2c -x 16 -s 16 -k 1M "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r536225.tar.gz"
+          tar xf clang-r536225.tar.gz
+          ls -l clang-r536225.tar.gz
+          rm -rf clang-r536225.tar.gz
+         
 
       - name: Build kernel
         run: |
@@ -270,6 +273,7 @@ jobs:
           export KBUILD_BUILD_TIMESTAMP="Tue Jan 20 03:24:58 UTC 2025"
           fi
 
+          
           export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r536225/bin:$PATH"
           export PATH="/usr/lib/ccache:$PATH"
           

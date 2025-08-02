@@ -204,18 +204,14 @@ jobs:
          git clone https://github.com/WildPlusKernel/AnyKernel3.git --depth=1
          rm -rf ./AnyKernel3/.git
          cp ./output/Image ./AnyKernel3/
-         
-      
-      - name: Extract kernel version
-        id: kernel_version
-        run: |
          version=$(strings Image | grep 'Linux version' | grep -v '%s' | awk '{print $3}' | cut -d'-' -f1)
          echo "version=$version" >> $GITHUB_OUTPUT
+         
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.ANDROID_VERSION }}-${{ steps.kernel_version.outputs.version }}-${{ github.event.inputs.ci_VERSION }}
+         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}-${{ GITHUB_OUTPUT }}
          path: ./AnyKernel3/*
          
       - name: Upload Image

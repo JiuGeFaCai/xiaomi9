@@ -243,7 +243,7 @@ jobs:
          else
            cd kernel_workspace/out/dist/
          fi
-         curl -LSs "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.0/patch_linux" -o patch_linux
+         curl -LSs "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.1/patch_linux" -o patch_linux
          chmod +x patch_linux
          ./patch_linux
          rm -f Image

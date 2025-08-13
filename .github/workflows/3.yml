@@ -130,8 +130,9 @@ jobs:
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
          if [ "${{ matrix.FEIL }}" = "oneplus_sm8750" ]; then
-         cd $GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/
-         mkdir zyc-clang & cd zyc-clang
+         cd kernel_platform/prebuilts/clang/host/linux-x86/
+         mkdir zyc-clang
+         cd zyc-clang
          wget https://github.com/ZyCromerZ/Clang/releases/download/19.0.0git-20240723-release/Clang-19.0.0git-20240723.tar.gz
          tar xf Clang-19.0.0git-20240723.tar.gz
          fi

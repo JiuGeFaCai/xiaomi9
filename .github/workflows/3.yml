@@ -40,11 +40,6 @@ on:
        required: false
        default: true
        type: boolean
-      enable_o2:
-       description: "是否启用o2编译"
-       required: false
-       default: false
-       type: boolean
       enable_lto:
        description: "是否启用lto编译"
        required: false
@@ -134,6 +129,12 @@ jobs:
          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+         if [ "${{ matrix.FEIL }}" = "oneplus_sm8750" ]; then
+         cd $GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/
+         mkdir zyc-clang & cd zyc-clang
+         wget https://github.com/ZyCromerZ/Clang/releases/download/19.0.0git-20240723-release/Clang-19.0.0git-20240723.tar.gz
+         tar xf Clang-19.0.0git-20240723.tar.gz
+         fi
 
       - name: Set up SukiSU
         run: |
@@ -262,8 +263,6 @@ jobs:
          echo "CONFIG_LTO_CLANG=y" >> ./common/arch/arm64/configs/gki_defconfig
          echo "CONFIG_LTO_CLANG_THIN=y" >> ./common/arch/arm64/configs/gki_defconfig
       
-      
-         
 
       - name: Build kernel
         run: |
@@ -272,8 +271,12 @@ jobs:
           export KBUILD_BUILD_TIMESTAMP="Tue Jan 20 03:24:58 UTC 2025"
           fi
 
-          
+          if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
           export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"
+          else
+          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/zyc-clang/bin:$PATH"
+          fi
+
           export PATH="/usr/lib/ccache:$PATH"
           
           # 设置 AFDO 配置文件路径
@@ -284,18 +287,8 @@ jobs:
           fi
 
           cd kernel_workspace/kernel_platform/common
-
           clang -v
-
-          if [ "${{ github.event.inputs.enable_o2 }}" = "true" ]; then
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC='ccache clang' RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld  HOSTLD=ld.lld O=out KCFLAGS+=-O2 gki_defconfig all
-          echo "Checking compiled optimization level:"
-          find out/ -name '*.cmd' | xargs grep -- '-O' | grep -v 'O2' | head
-          echo "Checking if ThinLTO was applied:"
-          find out/ -name '*.cmd' | xargs grep -E '\-flto(=thin)?' | head
-          else
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC='ccache clang' RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld  HOSTLD=ld.lld O=out KCFLAGS+="-Wno-error -fauto-profile=$AFDO_PROFILE" gki_defconfig all
-          fi
           # 创建输出目录并复制 Image
           mkdir -p ../dist
           cp out/arch/arm64/boot/Image ../dist/

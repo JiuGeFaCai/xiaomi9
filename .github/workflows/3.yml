@@ -60,7 +60,7 @@ jobs:
   build:
     strategy:
       matrix:
-        FEIL: ["oneplus_13_v", "oneplus_ace5_pro_v", "oneplus_13t", "oneplus_pad2_pro_v", "oneplus_ace5_ultra_v"]
+        FEIL: ["oneplus_13_v", "oneplus_ace5_pro_v", "oneplus_13t", "oneplus_pad2_pro_v", "oneplus_ace5_ultra_v", "oneplus_sm8750"]
             
     runs-on: ${{ github.event.inputs.BUILD_RUN }}
     env:
@@ -164,10 +164,14 @@ jobs:
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+           
            #lz4k
+           if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
            cp -r ../SukiSU_patch/other/lz4k/include/linux/* ./common/include/linux
            cp -r ../SukiSU_patch/other/lz4k/lib/* ./common/lib
            cp -r ../SukiSU_patch/other/lz4k/crypto/* ./common/crypto
+           fi
+
            # Apply patches
            cp ../sturdy-journey/fix.patch ./common/
            cd ./common
@@ -187,9 +191,11 @@ jobs:
 
       - name: Apply lz4kd Patches
         run: |
+          if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/other/lz4k_patch/${{ github.event.inputs.KERNEL_VERSION }}/lz4kd.patch ./
           patch -p1 -F 3 < lz4kd.patch || true
+          fi
            
       - name: Add SUSFS Configuration Settings
         run: |

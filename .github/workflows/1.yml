@@ -183,7 +183,11 @@ jobs:
         if: ${{ github.event.inputs.KERNEL_NAME != '' }}
         run: |
          cd kernel_workspace
+         if [ "${{ github.event.inputs.KERNEL_VERSION }}" != "6.6" ]; then
          sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
+         else
+         sed -i '$s|${file_localversion}|${{ github.event.inputs.KERNEL_NAME }}|' ./common/scripts/setlocalversion
+         fi
 
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
       - name: Custom BUILD_TIME

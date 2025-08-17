@@ -133,7 +133,17 @@ jobs:
            cp ../SukiSU_patch/hooks/syscall_hooks.patch ./
            # patch -p1 -F 3 < 69_hide_stuff.patch
            patch -p1 -F 3 < syscall_hooks.patch        
-           
+      
+
+      - name: oneplus
+        if: ${{inputs.enable_oneplus }}
+        run: |
+         cd kernel_workspace
+         git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
+         cp ./sturdy-journey/fix.patch ./common/
+         cd ./common
+         patch -p1 -F 3 < fix.patch
+         
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace
@@ -201,16 +211,6 @@ jobs:
             fi
           done
       
-      - name: oneplus
-        if: ${{inputs.enable_oneplus }}
-        run: |
-         cd kernel_workspace
-         git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
-         cp ./sturdy-journey/fix.patch ./common/
-         cd ./common
-         patch -p1 -F 3 < fix.patch
-         
-
       - name: Build kernel
         run: |
          cd kernel_workspace

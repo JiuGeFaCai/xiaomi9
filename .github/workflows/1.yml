@@ -183,8 +183,7 @@ jobs:
         if: ${{ github.event.inputs.KERNEL_NAME != '' }}
         run: |
          cd kernel_workspace
-         sed -i 's|\${config_localversion}\${LOCALVERSION}\${scm_version}|\${scm_version}\${config_localversion}\${LOCALVERSION}|' common/scripts/setlocalversion
-         sed -i "s|\\\${scm_version}|${{ github.event.inputs.KERNEL_NAME }}|g" common/scripts/setlocalversion
+         sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
 
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
       - name: Custom BUILD_TIME

@@ -43,6 +43,11 @@ on:
        required: false
        default: false
        type: boolean
+      enable_kpm:
+       description: "是否添加kpm"
+       required: false
+       default: true
+       type: boolean
 
 jobs:
   build:
@@ -233,6 +238,7 @@ jobs:
          fi
          mkdir output
          cp $OUTDIR/Image ./output/
+         if ${{inputs.enable_kpm }}; then
          cd output
          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
          chmod +x patch_linux
@@ -240,6 +246,7 @@ jobs:
          rm -f Image
          mv oImage Image
          cd ..
+         fi
          git clone https://github.com/WildPlusKernel/AnyKernel3.git --depth=1
          rm -rf ./AnyKernel3/.git
          cp ./output/Image ./AnyKernel3/

@@ -43,7 +43,7 @@ on:
       sukisu_tag:
         description: "自定义版本来源后缀"
         required: false
-        default: "闲鱼-搞机英雄-禁止倒卖"
+        default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
         
 
 jobs:

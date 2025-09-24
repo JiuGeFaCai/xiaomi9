@@ -14,7 +14,7 @@ on:
         description: "内核版本"
         required: true
         default: '6.1'
-      sukisu_tag:
+      sukisu_version:
         description: "sukisu分支"
         required: true
         default: 'susfs-main'
@@ -108,7 +108,7 @@ jobs:
       - name: Set up SukiSU
         run: |
          cd kernel_workspace
-         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_tag }}
+         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
          cd KernelSU
          # 获取自定义后缀（如：见清）
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"

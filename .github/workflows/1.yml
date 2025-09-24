@@ -51,7 +51,7 @@ on:
       sukisu_version:
         description: "sukisu分支"
         required: true
-        default: 'susfs-main'
+        default: "susfs-main"
 
 jobs:
   build:

@@ -14,10 +14,6 @@ on:
         description: "内核版本"
         required: true
         default: '6.1'
-      sukisu_version:
-        description: "sukisu分支"
-        required: true
-        default: 'susfs-main'
       KERNEL_NAME:
         type: string
         description: "自定义内核后缀 (留空则使用随机字符串)"
@@ -108,7 +104,7 @@ jobs:
       - name: Set up SukiSU
         run: |
          cd kernel_workspace
-         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
+         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
          cd KernelSU
          # 获取自定义后缀（如：见清）
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"

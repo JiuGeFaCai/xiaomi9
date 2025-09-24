@@ -14,10 +14,6 @@ on:
         description: "内核版本"
         required: true
         default: '6.1'
-      sukisu_version:
-        description: "sukisu分支"
-        required: true
-        default: 'susfs-main'
       KERNEL_NAME:
         type: string
         description: "自定义内核后缀 (留空则使用随机字符串)"
@@ -52,6 +48,10 @@ on:
        required: false
        default: true
        type: boolean
+      sukisu_version:
+        description: "sukisu分支"
+        required: true
+        default: 'susfs-main'
 
 jobs:
   build:

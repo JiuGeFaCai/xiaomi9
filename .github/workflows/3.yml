@@ -179,7 +179,8 @@ jobs:
            
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-           patch -p1 -F 3 < syscall_hooks.patch
+           cp ../../SukiSU_patch/hooks/sukisu_tracepoint_hooks_v1.1.patch ./
+           patch -p1 -F 3 < sukisu_tracepoint_hooks_v1.1.patch
            patch -p1 -F 3 < fix.patch
            echo "完成"
 

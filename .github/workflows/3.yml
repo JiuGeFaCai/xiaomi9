@@ -158,7 +158,7 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
-           git clone https://github.com/ExmikoN/SukiSU_patch.git
+           git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git
            git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
 
            cd kernel_platform        

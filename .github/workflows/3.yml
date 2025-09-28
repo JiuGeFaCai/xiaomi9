@@ -168,9 +168,9 @@ jobs:
            
            #lz4k
            if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
-           cp -r ../SukiSU_patch/other/zarm/lz4k/include/linux/* ./common/include/linux
-           cp -r ../SukiSU_patch/other/zarm/lz4k/lib/* ./common/lib
-           cp -r ../SukiSU_patch/other/zarm/lz4k/crypto/* ./common/crypto
+           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+           cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
            fi
 
            # Apply patches

@@ -116,11 +116,7 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
-           if [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.1" ]; then
-           cd susfs4ksu
-           git checkout 0e19a05277d28182c7b653580117145c53e69e92
-           cd ..
-           fi
+           
            git clone https://github.com/ShirkNeko/SukiSU_patch.git
            cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
            cp susfs4ksu/kernel_patches/fs/* ./common/fs/

@@ -181,7 +181,9 @@ jobs:
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
            cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
            patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch
+           if [ "${{ matrix.FEIL }}" != "oneplus_ace5_ultra_v" ]; then
            patch -p1 -F 3 < fix.patch
+           fi
            echo "完成"
 
       - name: Apply lz4kd Patches

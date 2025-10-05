@@ -135,6 +135,17 @@ jobs:
          wget https://github.com/ZyCromerZ/Clang/releases/download/19.0.0git-20240723-release/Clang-19.0.0git-20240723.tar.gz
          tar xf Clang-19.0.0git-20240723.tar.gz
          fi
+         cd ../../../../
+         if [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra_v" ]; then
+         cd kernel_platform/common
+         git remote add aosp https://android.googlesource.com/kernel/common.git
+         git fetch aosp android15-6.6-2025-09
+         git merge aosp/android15-6.6-2025-09 --allow-unrelated-histories
+         for file in $(git diff --name-only --diff-filter=U); do
+         git checkout --theirs "$file"
+         git add "$file"
+         done
+         fi
 
       - name: Set up SukiSU
         run: |

@@ -137,7 +137,7 @@ jobs:
          fi
          cd ../../../../
          if [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra_v" ]; then
-         cd kernel_platform/common
+         cd common
          git remote add aosp https://android.googlesource.com/kernel/common.git
          git fetch aosp android15-6.6-2025-09
          git merge aosp/android15-6.6-2025-09 --allow-unrelated-histories

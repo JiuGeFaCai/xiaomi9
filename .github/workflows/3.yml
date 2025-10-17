@@ -144,7 +144,7 @@ jobs:
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
          # 使用正确变量名 KSU_VERSION_API 替换函数体
          sed -i 's|\$(shell cd \$(srctree)/\$(src); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g' kernel/Makefile
-         echo "✅ Injected custom version: v$1-$(shell cd $(srctree)/$(src); $(GIT_BIN) rev-parse --short=8 HEAD)@$TAG_SUFFIX"
+         echo "✅ Injected custom version: v$(KSU_VERSION)@$TAG_SUFFIX"
          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10700)
          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION

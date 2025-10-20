@@ -125,7 +125,40 @@ jobs:
            sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
            sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
            fi
+           
+           # Fake Patch to fix failures
+           fake_patched=0
+           if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.6" ]; then
+            if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+              echo "未找到 nr_subpages,正在进行补丁修复"
+              sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
+              fake_patched=1
+            fi
+           fi
+           if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android12" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ]; then
+            if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+              echo "未找到 vma_pages,正在进行补丁修复"
+              fake_patched=1
+            fi
+           fi
+
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+
+           # Revert
+           if [ "$fake_patched" = 1 ]; then
+            if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.6" ]; then
+              if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+                sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
+              fi
+            fi
+            if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android12" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ]; then
+              if grep -qxF $'\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
+                sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+              fi
+            fi
+           fi
+
+
            # cp ../kernel_patches/69_hide_stuff.patch ./
            cp ../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
            # patch -p1 -F 3 < 69_hide_stuff.patch

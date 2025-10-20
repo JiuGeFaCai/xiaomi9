@@ -173,8 +173,27 @@ jobs:
            # Apply patches
            cp ../sturdy-journey/fix.patch ./common/
            cd ./common
+
+           # Fake Patch to fix failures
+           fake_patched=0
+           if [ "${{ matrix.FEIL }}" = "oneplus_pad2_pro_v" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra_v" ]; then
+            if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+              echo "未找到 nr_subpages,正在进行补丁修复"
+              sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
+              fake_patched=1
+            fi
+           fi
            
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+
+           if [ "$fake_patched" = 1 ]; then
+            if [ "${{ matrix.FEIL }}" = "oneplus_pad2_pro_v" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra_v" ]; then
+              if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+                sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
+              fi
+            fi
+           fi
+
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
            cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
            patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch

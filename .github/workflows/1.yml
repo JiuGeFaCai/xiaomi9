@@ -42,6 +42,15 @@ on:
         description: "sukisu分支"
         required: true
         default: "susfs-main"
+      HOOK:
+        type: choice
+        description: "钩子选择"
+        required: true
+        default: manual
+        options:
+          - kprobe
+          - manual
+          - tracepoint
 
 jobs:
   build:
@@ -160,9 +169,24 @@ jobs:
 
 
            # cp ../kernel_patches/69_hide_stuff.patch ./
-           cp ../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
+           #cp ../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
            # patch -p1 -F 3 < 69_hide_stuff.patch
-           patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch        
+           #patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch        
+      
+      - name: Apply HOOK
+        run: |
+          cd kernel_workspace/common
+          if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
+          echo "调用 kprobe 钩子"
+          elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
+          cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
+          echo "调用 manual 钩子"
+          patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch
+          elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
+          cp ../../SukiSU_patch/hooks/sukisu_tracepoint_hooks_v1.1.patch ./
+          echo "调用 tracepoint 钩子"
+          patch -p1 -F 3 < sukisu_tracepoint_hooks_v1.1.patch
+          fi
       
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
       - name: Custom BUILD_TIME
@@ -237,29 +261,42 @@ jobs:
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace
-          echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KPM=y" >> ./common/arch/arm64/configs/gki_defconfig
+          CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
+          # SukiSU Ultra配置
+          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
 
-          # Add VFS configuration settings
-          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./common/arch/arm64/configs/gki_defconfig
-          
-          # Add SUSFS configuration settings
-          echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          # KPM配置
+          echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+
+          # HOOK配置
+          if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
+            echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
+            echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
+            echo "CONFIG_KSU_KPROBES_HOOK=y" >> "$CONFIG_FILE"
+          elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
+            echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
+            echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
+          elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
+            echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
+            echo "CONFIG_KSU_TRACEPOINT_HOOK=y" >> "$CONFIG_FILE"
+          fi
+
+          # SUSFS配置
+          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
          
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki

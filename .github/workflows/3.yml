@@ -54,7 +54,7 @@ jobs:
   build:
     strategy:
       matrix:
-        FEIL: ["oneplus_13", "oneplus_ace5_pro", "oneplus_13t", "oneplus_pad_2_pro", "oneplus_ace5_ultra", "oneplus_ace6_w"]
+        FEIL: ["oneplus_13", "oneplus_ace5_pro", "oneplus_13t", "oneplus_pad_2_pro", "oneplus_ace5_ultra"]
             
     runs-on: ${{ github.event.inputs.BUILD_RUN }}
     env:

@@ -84,7 +84,7 @@ jobs:
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         run: |
          sudo apt update && sudo apt upgrade -y
-         sudo apt install -y python3 git curl ccache libelf-dev aria2
+         sudo apt install -y python3 git curl ccache libelf-dev aria2 dos2unix
 
       - name: Restore ccache
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}

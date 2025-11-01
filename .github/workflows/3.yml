@@ -176,7 +176,7 @@ jobs:
 
            # Fake Patch to fix failures
            fake_patched=0
-           if [ "${{ matrix.FEIL }}" = "oneplus_pad2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then
+           if [ "${{ matrix.FEIL }}" = "oneplus_pad_2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then
             if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
               echo "未找到 nr_subpages,正在进行补丁修复"
               sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
@@ -187,7 +187,7 @@ jobs:
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
 
            if [ "$fake_patched" = 1 ]; then
-            if [ "${{ matrix.FEIL }}" = "oneplus_pad2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then
+            if [ "${{ matrix.FEIL }}" = "oneplus_pad_2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then
               if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
                 sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
               fi

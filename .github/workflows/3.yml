@@ -195,13 +195,13 @@ jobs:
            fi
 
            cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-           cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
+           cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.6.patch ./
 
            if [ "${{ matrix.FEIL }}" = "oneplus_sm8750" ]; then
             sed -i '/#include <linux\/cpufreq_times.h>/a #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux/susfs_def.h>\n#endif' fs/proc/base.c
            fi
 
-           patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch
+           patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch
            
            echo "完成"
 

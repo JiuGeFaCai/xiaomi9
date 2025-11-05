@@ -128,9 +128,9 @@ jobs:
            cd ./common       
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
            # cp ../../kernel_patches/69_hide_stuff.patch ./
-           cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.5.patch ./
+           cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.6.patch ./
            # patch -p1 -F 3 < 69_hide_stuff.patch
-           patch -p1 -F 3 < scope_min_manual_hooks_v1.5.patch
+           patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch
 
       - name: Apply LZ4KD
         if: ${{ github.event.inputs.ZRAM == 'true' }}

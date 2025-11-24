@@ -1,45 +1,27 @@
-name: GKI Build SuKiSu SUSFS
+name: OnePlus SM8750 Build SuKiSu SUSFS
 on:
   workflow_dispatch:
-    inputs:
+      inputs:
       ci_VERSION:
-        description: "Ë∞∑Ê≠åciÁâàÊú¨"
+        description: "π»∏Ëci∞Ê±æ"
         required: true
-        default: ''
-      ANDROID_VERSION:
-        description: "ÂÜÖÊ†∏ÂÆâÂçìÁâàÊú¨"
-        required: true
-        default: 'android14'
-      KERNEL_VERSION:
-        description: "ÂÜÖÊ†∏ÁâàÊú¨"
-        required: true
-        default: '6.1'
+        default: 'android16-6.12-2025-06'
       KERNEL_NAME:
         type: string
-        description: "Ëá™ÂÆö‰πâÂÜÖÊ†∏ÂêéÁºÄ (ÁïôÁ©∫Âàô‰ΩøÁî®ÈöèÊú∫Â≠óÁ¨¶‰∏≤)"
+        description: "◊‘∂®“Âƒ⁄∫À∫Û◊∫ (¡Ùø’‘Ú π”√ÀÊª˙◊÷∑˚¥Æ)"
         required: false
         default: ""
       BUILD_TIME:
         type: string
-        description: "Ëá™ÂÆö‰πâÊûÑÂª∫Êó∂Èó¥ (ËæìÂÖ•F‰ΩøÁî®ÂΩìÂâçÊó∂Èó¥)"
+        description: "◊‘∂®“ÂππΩ® ±º‰ ( ‰»ÎF π”√µ±«∞ ±º‰)"
         required: false
         default: "Sun Jun 15 14:56:02 UTC 2025"
       sukisu_tag:
-        description: "Ëá™ÂÆö‰πâÁâàÊú¨Êù•Ê∫êÂêéÁºÄ"
+        description: "◊‘∂®“Â∞Ê±æ¿¥‘¥∫Û◊∫"
         required: false
-        default: "Èó≤È±º-ÊêûÊú∫Ëã±ÈõÑ-Á¶ÅÊ≠¢ÈªëÁÅ∞ËøùÊ≥ïÁäØÁΩ™ÂÄíÂçñ"
-      enable_patch:
-       description: "ÊòØÂê¶ÂêØÁî®6.6.30Ë°•‰∏Å"
-       required: false
-       default: false
-       type: boolean
-      enable_oneplus:
-       description: "ÊòØÂê¶ÂêØÁî®‰∏ÄÂä†ÂºÄÊú∫Ë°•‰∏Å"
-       required: false
-       default: false
-       type: boolean
+        default: "œ–”„-∏„ª˙”¢–€-Ω˚÷π∫⁄ª“Œ•∑®∑∏◊Ôµπ¬Ù"
       sukisu_version:
-        description: "sukisuÂàÜÊîØ"
+        description: "sukisu∑÷÷ß"
         required: true
         default: "susfs-main"
 jobs:
@@ -91,8 +73,9 @@ jobs:
          fi
          repo --version
          repo --trace sync -c -j$(nproc --all) --no-tags
+         rm common
+         git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850.git --depth 1 common
 
-         rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          
       - name: Set up SukiSU
         run: |
@@ -100,96 +83,44 @@ jobs:
          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
          cd KernelSU
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
-         # ‰ΩøÁî®Ê≠£Á°ÆÂèòÈáèÂêç KSU_VERSION_API ÊõøÊç¢ÂáΩÊï∞‰Ωì
+         #  π”√’˝»∑±‰¡ø√˚ KSU_VERSION_API ÃÊªª∫Ø ˝ÃÂ
          sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Makefile
          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 37185)
          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
-         echo "‚úÖ Injected custom version: v$(KSU_VERSION)@$TAG_SUFFIX"
+         echo "? Injected custom version: v$(KSU_VERSION)@$TAG_SUFFIX"
          
          
       - name: Set up susfs
         run: |
            cd kernel_workspace
-           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
+           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android16-6.12
            
            git clone https://github.com/ShirkNeko/SukiSU_patch.git
-           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
+           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android16-6.12.patch ./common/
            cp susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
            # Apply patches
-           cd ./common
-           if ${{inputs.enable_patch }}; then
-           sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
-           sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
-           fi
-           
-           # Fake Patch to fix failures
-           fake_patched=0
-           if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.6" ]; then
-            if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-              echo "Êú™ÊâæÂà∞ nr_subpages,Ê≠£Âú®ËøõË°åË°•‰∏Å‰øÆÂ§ç"
-              sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
-              fake_patched=1
-            fi
-           fi
-           if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android12" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ]; then
-            if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-              echo "Êú™ÊâæÂà∞ vma_pages,Ê≠£Âú®ËøõË°åË°•‰∏Å‰øÆÂ§ç"
-              fake_patched=1
-            fi
-           fi
-           if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android13" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.15" ]; then
-            if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-              echo "Êú™ÊâæÂà∞ vma_pages,Ê≠£Âú®ËøõË°åË°•‰∏Å‰øÆÂ§ç"
-              fake_patched=1
-            fi
-           fi
-
-           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-
-           # Revert
-           if [ "$fake_patched" = 1 ]; then
-            if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.6" ]; then
-              if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-                sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
-              fi
-            fi
-            if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android12" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ]; then
-              if grep -qxF $'\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-                sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-              fi
-            fi
-            if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android13" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.15" ]; then
-              if grep -qxF $'\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-                sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-              fi
-            fi
-           fi
-
-
-           # cp ../kernel_patches/69_hide_stuff.patch ./
-           #cp ../SukiSU_patch/hooks/scope_min_manual_hooks_v1.6.patch ./
-           # patch -p1 -F 3 < 69_hide_stuff.patch
-           #patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch        
+                
+           patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch || true    
       
       # - name: Apply HOOK
       #   run: |
       #     cd kernel_workspace/common
       #     if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-      #     echo "Ë∞ÉÁî® kprobe Èí©Â≠ê"
+      #     echo "µ˜”√ kprobe π≥◊”"
       #     elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
       #     cp ../SukiSU_patch/hooks/scope_min_manual_hooks_v1.6.patch ./
-      #     echo "Ë∞ÉÁî® manual Èí©Â≠ê"
+      #     echo "µ˜”√ manual π≥◊”"
       #     patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch
       #     elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
       #     cp ../SukiSU_patch/hooks/sukisu_tracepoint_hooks_v1.1.patch ./
-      #     echo "Ë∞ÉÁî® tracepoint Èí©Â≠ê"
+      #     echo "µ˜”√ tracepoint π≥◊”"
       #     patch -p1 -F 3 < sukisu_tracepoint_hooks_v1.1.patch
       #     fi
       
-      # Custom kernel build time, without adding #1 SMP PREEMPT Ëá™ÂÆö‰πâÂÜÖÊ†∏ÊûÑÂª∫Êó∂Èó¥Ôºå‰∏çË¶ÅÂä†ÂÖ•#1 SMP PREEMPT
+      # Custom kernel build time, without adding #1 SMP PREEMPT ◊‘∂®“Âƒ⁄∫ÀππΩ® ±º‰£¨≤ª“™º”»Î#1 SMP PREEMPT
       - name: Custom BUILD_TIME
         shell: bash
         run: |
@@ -220,69 +151,21 @@ jobs:
         run: |
          cd kernel_workspace
          git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
-         cp ./sturdy-journey/fix.patch ./common/
+         cp ./sturdy-journey/lsm.patch ./common/
          cd ./common
-         patch -p1 -F 3 < fix.patch
+         patch -p1 -F 3 < lsm.patch
 
-      - name: Kernel Version Handling
-        run: |
-          cd kernel_workspace
-          # Ëé∑ÂèñÂÜÖÊ†∏ Android ÁâàÊú¨Âè∑(KANDROID_VERSION)‰ª•ÂèäÂÜÖÊ†∏ÁâàÊú¨Âè∑(KERNEL_VERSION)
-          for f in ./common/build.config.constants ./common/build.config.common; do
-            if [ -f "$f" ]; then
-              BRANCH=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
-              [ -n "$BRANCH" ] && break
-            fi
-          done
-
-          if [ -n "$BRANCH" ]; then
-            echo "KANDROID_VERSION=${BRANCH%-*}" >> $GITHUB_ENV
-            echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
-          else
-            echo "No BRANCH found in build.config files"
-          fi
-
-          # ‰ªé Makefile Ëé∑ÂèñÂÆåÊï¥ÂÜÖÊ†∏ÁâàÊú¨Âè∑(TKERNEL_VERSION)‰ª•ÂèäÂèØÈÄâÁöÑ‰øÆÊîπÂÜÖÊ†∏Á≠âÁ∫ß
-          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
-
-          # Âº∫Âà∂‰øÆÊîπ SUBLEVEL(ÂÜÖÊ†∏Á≠âÁ∫ß)ÔºåÈªòËÆ§ÂÖ≥Èó≠
-          # sed -i 's/^SUBLEVEL[[:space:]]*=[[:space:]]*.*/SUBLEVEL = 99/' ./common/Makefile
-
-          # ËØªÂèñ‰øÆÊîπÂêéÁöÑÁâàÊú¨
-          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
-
-          if [ "$ORIG_VERSION" != "$NEW_VERSION" ]; then
-            echo "Kernel Version:$ORIG_VERSION->$NEW_VERSION"
-            echo "TKERNEL_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          else
-            echo "Kernel Version:$ORIG_VERSION No changes"
-            echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
-          fi
-         
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
-          # SukiSU UltraÈÖçÁΩÆ
+          # SukiSU Ultra≈‰÷√
           echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
 
-          # KPMÈÖçÁΩÆ
+          # KPM≈‰÷√
           echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
 
-          # # HOOKÈÖçÁΩÆ
-          # if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_KPROBES_HOOK=y" >> "$CONFIG_FILE"
-          # elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
-          # elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_TRACEPOINT_HOOK=y" >> "$CONFIG_FILE"
-          # fi
-
-          # SUSFSÈÖçÁΩÆ
+          # SUSFS≈‰÷√
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
@@ -304,7 +187,7 @@ jobs:
           sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
           if [ -f "BUILD.bazel" ]; then
-          sed -i '/"protected_exports_list": "android\/abi_gki_protected_exports_aarch64"/d' BUILD.bazel
+          sed -i '/protected_module_names_list.*gki_aarch64_protected_module_names/d' BUILD.bazel
           fi
           git add -A && git commit -a -m "BUILD Kernel"
 
@@ -324,7 +207,7 @@ jobs:
          if [ -e build/build.sh ]; then
            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
          else
-           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+           tools/bazel run --config=fast --config=stamp //common:kernel_aarch64_dist -- --dist_dir=dist
          fi
 
       - name: Make AnyKernel3
@@ -349,7 +232,7 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}-(${{ env.TKERNEL_VERSION }})
+         name: SuKiSu_${{ env.KSUVER }}_android16-6-12
          path: ./AnyKernel3/*
          
       - name: Upload Image

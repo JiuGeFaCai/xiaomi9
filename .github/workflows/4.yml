@@ -149,7 +149,6 @@ jobs:
           done
           
       - name: oneplus
-        if: ${{inputs.enable_oneplus }}
         run: |
          cd kernel_workspace
          git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git

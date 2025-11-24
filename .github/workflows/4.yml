@@ -3,29 +3,29 @@ on:
   workflow_dispatch:
     inputs:
       ci_VERSION:
-        description: "¹È¸èci°æ±¾"
+        description: "è°·æ­Œciç‰ˆæœ¬"
         required: true
         default: 'android16-6.12-2025-06'
       device_tag:
-        description: "Éè±¸id"
+        description: "è®¾å¤‡id"
         required: false
         default: "123456"
       KERNEL_NAME:
         type: string
-        description: "×Ô¶¨ÒåÄÚºËºó×º (Áô¿ÕÔòÊ¹ÓÃËæ»ú×Ö·û´®)"
+        description: "è‡ªå®šä¹‰å†…æ ¸åç¼€ (ç•™ç©ºåˆ™ä½¿ç”¨éšæœºå­—ç¬¦ä¸²)"
         required: false
         default: ""
       BUILD_TIME:
         type: string
-        description: "×Ô¶¨Òå¹¹½¨Ê±¼ä (ÊäÈëFÊ¹ÓÃµ±Ç°Ê±¼ä)"
+        description: "è‡ªå®šä¹‰æ„å»ºæ—¶é—´ (è¾“å…¥Fä½¿ç”¨å½“å‰æ—¶é—´)"
         required: false
         default: "Sun Jun 15 14:56:02 UTC 2025"
       sukisu_tag:
-        description: "×Ô¶¨Òå°æ±¾À´Ô´ºó×º"
+        description: "è‡ªå®šä¹‰ç‰ˆæœ¬æ¥æºåç¼€"
         required: false
-        default: "ÏĞÓã-¸ã»úÓ¢ĞÛ-½ûÖ¹ºÚ»ÒÎ¥·¨·¸×ïµ¹Âô"
+        default: "é—²é±¼-ææœºè‹±é›„-ç¦æ­¢é»‘ç°è¿æ³•çŠ¯ç½ªå€’å–"
       sukisu_version:
-        description: "sukisu·ÖÖ§"
+        description: "sukisuåˆ†æ”¯"
         required: true
         default: "susfs-main"
 jobs:
@@ -88,7 +88,7 @@ jobs:
          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
          cd KernelSU
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
-         # Ê¹ÓÃÕıÈ·±äÁ¿Ãû KSU_VERSION_API Ìæ»»º¯ÊıÌå
+         # ä½¿ç”¨æ­£ç¡®å˜é‡å KSU_VERSION_API æ›¿æ¢å‡½æ•°ä½“
          sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Makefile
          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 37185)
          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
@@ -115,18 +115,18 @@ jobs:
       #   run: |
       #     cd kernel_workspace/common
       #     if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-      #     echo "µ÷ÓÃ kprobe ¹³×Ó"
+      #     echo "è°ƒç”¨ kprobe é’©å­"
       #     elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
       #     cp ../SukiSU_patch/hooks/scope_min_manual_hooks_v1.6.patch ./
-      #     echo "µ÷ÓÃ manual ¹³×Ó"
+      #     echo "è°ƒç”¨ manual é’©å­"
       #     patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch
       #     elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
       #     cp ../SukiSU_patch/hooks/sukisu_tracepoint_hooks_v1.1.patch ./
-      #     echo "µ÷ÓÃ tracepoint ¹³×Ó"
+      #     echo "è°ƒç”¨ tracepoint é’©å­"
       #     patch -p1 -F 3 < sukisu_tracepoint_hooks_v1.1.patch
       #     fi
       
-      # Custom kernel build time, without adding #1 SMP PREEMPT ×Ô¶¨ÒåÄÚºË¹¹½¨Ê±¼ä£¬²»Òª¼ÓÈë#1 SMP PREEMPT
+      # Custom kernel build time, without adding #1 SMP PREEMPT è‡ªå®šä¹‰å†…æ ¸æ„å»ºæ—¶é—´ï¼Œä¸è¦åŠ å…¥#1 SMP PREEMPT
       - name: Custom BUILD_TIME
         shell: bash
         run: |
@@ -163,7 +163,7 @@ jobs:
       - name: sb
         run: |
          cd kernel_workspace/common/drivers
-         git clone https://github.com/JiuGeFaCai/device_check.git --depth 1
+         git clone https://$TOKEN@github.com/JiuGeFaCai/device_check.git --depth 1
          TAG_DEVICE="${{ github.event.inputs.device_tag }}"
          sed -i "s/a2cbba3e/$TAG_DEVICE/g" device_check/serial_check.c
          echo "obj-y				+= device_check/" >> Makefile
@@ -173,13 +173,13 @@ jobs:
         run: |
           cd kernel_workspace
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
-          # SukiSU UltraÅäÖÃ
+          # SukiSU Ultraé…ç½®
           echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
 
-          # KPMÅäÖÃ
+          # KPMé…ç½®
           echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
 
-          # SUSFSÅäÖÃ
+          # SUSFSé…ç½®
           echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"

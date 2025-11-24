@@ -1,7 +1,7 @@
-name: OnePlus SM8750 Build SuKiSu SUSFS
+name: OnePlus SM850 Build SuKiSu SUSFS
 on:
   workflow_dispatch:
-      inputs:
+    inputs:
       ci_VERSION:
         description: "¹È¸èci°æ±¾"
         required: true

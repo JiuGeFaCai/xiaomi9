@@ -80,6 +80,7 @@ jobs:
       - name: Set up SukiSU
         run: |
          cd kernel_workspace
+         sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
          cd KernelSU
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
@@ -89,7 +90,7 @@ jobs:
          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
          echo "? Injected custom version: v$(KSU_VERSION)@$TAG_SUFFIX"
-         sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
+         
          
          
       - name: Set up susfs

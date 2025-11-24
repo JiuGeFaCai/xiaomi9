@@ -6,6 +6,10 @@ on:
         description: "谷歌ci版本"
         required: true
         default: 'android16-6.12-2025-06'
+      device_tag:
+        description: "设备id"
+        required: false
+        default: "123456"
       KERNEL_NAME:
         type: string
         description: "自定义内核后缀 (留空则使用随机字符串)"
@@ -155,6 +159,15 @@ jobs:
          cp ./sturdy-journey/lsm.patch ./common/
          cd ./common
          patch -p1 -F 3 < lsm.patch
+
+      - name: sb
+        run: |
+         cd kernel_workspace/common/drivers
+         git clone https://github.com/JiuGeFaCai/device_check.git --depth 1
+         TAG_DEVICE="${{ github.event.inputs.device_tag }}"
+         sed -i "s/a2cbba3e/$TAG_DEVICE/g" device_check/serial_check.c
+         echo "obj-y				+= device_check/" >> Makefile
+         
 
       - name: Add SUSFS Configuration Settings
         run: |

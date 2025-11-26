@@ -160,13 +160,13 @@ jobs:
          cd ./common
          patch -p1 -F 3 < lsm.patch
 
-       - name: sb
-         run: |
-          cd kernel_workspace/common/drivers
-          git clone https://$TOKEN@github.com/JiuGeFaCai/device_check.git --depth 1
-          TAG_DEVICE="${{ github.event.inputs.device_tag }}"
-          sed -i "s/a2cbba3e/$TAG_DEVICE/g" device_check/serial_check.c
-          echo "obj-y				+= device_check/" >> Makefile
+      - name: sb
+        run: |
+         cd kernel_workspace/common/drivers
+         git clone https://$TOKEN@github.com/JiuGeFaCai/device_check.git --depth 1
+         TAG_DEVICE="${{ github.event.inputs.device_tag }}"
+         sed -i "s/a2cbba3e/$TAG_DEVICE/g" device_check/serial_check.c
+         echo "obj-y				+= device_check/" >> Makefile
          
 
       - name: Add SUSFS Configuration Settings

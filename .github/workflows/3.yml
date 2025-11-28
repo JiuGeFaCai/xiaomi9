@@ -1,15 +1,6 @@
 name: OnePlus SM8750 Build SuKiSu SUSFS
 on:
   workflow_dispatch:
-    inputs:
-      ANDROID_VERSION:
-        description: "内核安卓版本"
-        required: true
-        default: 'android15'
-      KERNEL_VERSION:
-        description: "内核版本"
-        required: true
-        default: '6.6'
       sukisu_version:
         description: "sukisu分支"
         required: true
@@ -146,12 +137,12 @@ jobs:
       - name: Set up susfs
         run: |
            cd kernel_workspace
-           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
+           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6
            git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git
            git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
 
            cd kernel_platform        
-           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
+           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
            
@@ -176,7 +167,7 @@ jobs:
             fi
            fi
            
-           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
 
            if [ "$fake_patched" = 1 ]; then
             if [ "${{ matrix.FEIL }}" = "oneplus_pad_2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then
@@ -201,7 +192,7 @@ jobs:
         run: |
           if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
           cd kernel_workspace/kernel_platform/common
-          cp ../../SukiSU_patch/other/zram/zram_patch/${{ github.event.inputs.KERNEL_VERSION }}/lz4kd.patch ./
+          cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
           patch -p1 -F 3 < lz4kd.patch || true
           fi
            

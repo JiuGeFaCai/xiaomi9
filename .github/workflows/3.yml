@@ -1,6 +1,7 @@
 name: OnePlus SM8750 Build SuKiSu SUSFS
 on:
   workflow_dispatch:
+    inputs:
       sukisu_version:
         description: "sukisu分支"
         required: true

@@ -6,6 +6,11 @@ on:
         description: "谷歌ci版本"
         required: true
         default: 'android16-6.12-2025-06'
+      enable_device_check:
+       description: "设备id判断"
+       required: false
+       default: true
+       type: boolean
       device_tag:
         description: "设备id"
         required: false
@@ -161,6 +166,7 @@ jobs:
          patch -p1 -F 3 < lsm.patch
 
       - name: sb
+        if: ${{ inputs.enable_device_check }}
         run: |
          cd kernel_workspace/common/drivers
          git clone https://$TOKEN@github.com/JiuGeFaCai/device_check.git --depth 1

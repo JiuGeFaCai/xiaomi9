@@ -216,7 +216,6 @@ jobs:
           if [ -f "BUILD.bazel" ]; then
           sed -i '/protected_module_names_list.*gki_aarch64_protected_module_names/d' BUILD.bazel
           fi
-          git add -A && git commit -a -m "BUILD Kernel"
 
       - name: Add make name
         if: ${{ github.event.inputs.KERNEL_NAME != '' }}
@@ -227,7 +226,9 @@ jobs:
          else
          sed -i '$s|${file_localversion}|${{ github.event.inputs.KERNEL_NAME }}|' ./common/scripts/setlocalversion
          fi
-   
+         cd common
+         git add -A && git commit -a -m "BUILD Kernel"
+            
       - name: Build kernel
         run: |
          cd kernel_workspace

@@ -25,7 +25,7 @@ on:
       sukisu_version:
         description: "sukisu分支"
         required: true
-        default: 'susfs-main'
+        default: 'builtin'
       KERNEL_NAME:
         type: string
         description: "自定义内核后缀 (留空则使用随机字符串)"

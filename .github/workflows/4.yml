@@ -82,8 +82,10 @@ jobs:
          fi
          repo --version
          repo --trace sync -c -j$(nproc --all) --no-tags
+         if [ "${{ github.event.inputs.ci_VERSION }}" = "android16-6.12-2025-06" ]; then
          rm -rf common
          git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850.git --depth 1 common
+         fi
 
          
       - name: Set up SukiSU

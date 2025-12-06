@@ -228,13 +228,12 @@ jobs:
          else
          sed -i '$s|${file_localversion}|${{ github.event.inputs.KERNEL_NAME }}|' ./common/scripts/setlocalversion
          fi
-         cd common
-         git add -A && git commit -a -m "BUILD Kernel"
             
       - name: Build kernel
         run: |
          cd kernel_workspace
          cd common
+         rm -rf drivers/device_check/.git
          git add -A && git commit -a -m "BUILD Kernel"
          cd ..
          tools/bazel run --config=fast --config=stamp //common:kernel_aarch64_dist  -- --destdir=dist

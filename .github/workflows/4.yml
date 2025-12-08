@@ -32,7 +32,7 @@ on:
       sukisu_version:
         description: "sukisu分支"
         required: true
-        default: "builtin"
+        default: "tmp-builtin"
 jobs:
   build:
     runs-on: ubuntu-22.04

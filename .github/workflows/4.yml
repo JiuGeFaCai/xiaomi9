@@ -28,7 +28,7 @@ on:
       sukisu_tag:
         description: "自定义版本来源后缀"
         required: false
-        default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
+        default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
       sukisu_version:
         description: "sukisu分支"
         required: true

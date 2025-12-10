@@ -10,6 +10,11 @@ on:
         description: "修改内核名称"
         required: true
         default: '-android15-8-g013ec21bba94-abogki383916444'
+      BUILD_TIME:
+        type: string
+        description: "自定义构建时间 (输入F使用当前时间)"
+        required: false
+        default: "Sun Jun 15 14:56:02 UTC 2025"
       BUILD_RUN:
         type: choice
         description: "RUN"
@@ -279,14 +284,36 @@ jobs:
          cd kernel_workspace/kernel_platform
          echo "CONFIG_LTO_CLANG=y" >> ./common/arch/arm64/configs/gki_defconfig
          echo "CONFIG_LTO_CLANG_THIN=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+      # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
+      - name: Custom BUILD_TIME
+        shell: bash
+        run: |
+          INPUT_TIME="${{ github.event.inputs.BUILD_TIME }}"
+          if [[ -n "$INPUT_TIME" && "$INPUT_TIME" != "F" && "$INPUT_TIME" != "f" ]]; then
+            DATESTR="$INPUT_TIME"
+            echo "Using input BUILD_TIME: $DATESTR"
+          else
+            DATESTR="$(TZ='UTC' date +'%a %b %d %T %Z %Y')"
+            echo "Using UTC time as fallback: $DATESTR"
+          fi
+          echo "KBUILD_BUILD_TIMESTAMP=${DATESTR}" >> "$GITHUB_ENV"
+          echo "KBUILD_BUILD_VERSION=1" >> "$GITHUB_ENV"
+          cd kernel_workspace/kernel_platform/
+          for f in common/scripts/mkcompile_h; do
+            if [ -f "$f" ]; then
+              echo "Patching mkcompile_h with BUILD_TIME=$DATESTR"
+              if grep -q 'UTS_VERSION=' "$f"; then
+                perl -pi -e "s{UTS_VERSION=\"\\\$\\(.*?\\)\"}{UTS_VERSION=\"#1 SMP PREEMPT $DATESTR\"}" "$f"
+              else
+                perl -0777 -pi -e "s{cat <<EOF}{cat <<EOF\n#undef UTS_VERSION\n#define UTS_VERSION \"#1 SMP PREEMPT $DATESTR\" } unless /UTS_VERSION/" "$f"
+              fi
+            fi
+          done
       
 
       - name: Build kernel
         run: |
-          export KBUILD_BUILD_TIMESTAMP="Tue Dec 17 23:36:49 UTC 2024"
-          if [ "${{ matrix.FEIL }}" = "oneplus_13t" ]; then
-          export KBUILD_BUILD_TIMESTAMP="Tue Jan 20 03:24:58 UTC 2025"
-          fi
 
           if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then
           export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin:$PATH"

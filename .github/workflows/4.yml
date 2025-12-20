@@ -247,7 +247,7 @@ jobs:
          mkdir output
          cp $OUTDIR/Image ./output/
          cd output
-         curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
+         curl -LSs "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.2/patch_linux" -o patch_linux
          chmod +x patch_linux
          ./patch_linux
          rm -f Image

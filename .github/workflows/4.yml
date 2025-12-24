@@ -86,6 +86,10 @@ jobs:
          rm -rf common
          git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850.git --depth 1 common
          fi
+         if [ "${{ github.event.inputs.ci_VERSION }}" = "android16-6.12-2025-09" ]; then
+         rm -rf common
+         git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8845.git --depth 1 common
+         fi
 
          
       - name: Set up SukiSU

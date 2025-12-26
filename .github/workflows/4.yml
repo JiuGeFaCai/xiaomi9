@@ -191,7 +191,7 @@ jobs:
         run: |
          cd kernel_workspace
          git clone https://github.com/ITxiao6666/Unicode_bypass_Fix.git
-         cp ./unicode_bypass_fix_6.12.patch ./common/
+         cp ./Unicode_bypass_Fix/unicode_bypass_fix_6.12.patch ./common/
          cd ./common
          patch -p1 -F 3 < unicode_bypass_fix_6.12.patch
 

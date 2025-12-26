@@ -41,6 +41,11 @@ on:
         description: "是否启用添加更多的ZRAM算法？"
         required: true
         default: false
+      enable_Unicode_bypass_Fix:
+       description: "零宽字符漏洞的修复补丁"
+       required: false
+       default: false
+       type: boolean
       sukisu_tag:
         description: "自定义版本来源后缀"
         required: false
@@ -135,7 +140,7 @@ jobs:
       - name: Apply LZ4KD
         if: ${{ github.event.inputs.ZRAM == 'true' }}
         run: |
-          cd kernel_workspace/kernel_platform/common
+            cd kernel_workspace/kernel_platform/common
             cp ../../SukiSU_patch/other/zram/zram_patch/${{ github.event.inputs.KERNEL_VERSION }}/lz4kd.patch ./
             echo "正在打lz4kd补丁"
             patch -p1 -F 3 < lz4kd.patch || true
@@ -144,6 +149,16 @@ jobs:
             echo "正在打lz4k_oplus补丁"
             patch -p1 -F 3 < lz4k_oplus.patch || true
             echo 'lz4k_oplus_patch完成'
+
+
+      - name: Apply Unicode bypass Fix
+        if: ${{inputs.enable_Unicode_bypass_Fix }}
+        run: |
+         cd kernel_workspace/kernel_platform
+         git clone https://github.com/ITxiao6666/Unicode_bypass_Fix.git
+         cp ./unicode_bypass_fix_5.10-6.1.patch ./common/
+         cd ./common
+         patch -p1 -F 3 < unicode_bypass_fix_5.10-6.1.patch
            
       - name: Add SUSFS Configuration Settings
         run: |

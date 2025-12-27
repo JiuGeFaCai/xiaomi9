@@ -31,7 +31,7 @@ on:
       enable_lto:
        description: "是否启用lto编译"
        required: false
-       default: false
+       default: true
        type: boolean
       enable_Unicode_bypass_Fix:
        description: "零宽字符漏洞的修复补丁"

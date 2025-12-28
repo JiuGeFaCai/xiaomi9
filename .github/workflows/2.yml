@@ -151,14 +151,65 @@ jobs:
             echo 'lz4k_oplus_patch完成'
 
 
+      - name: Kernel Version Handling
+        run: |
+          cd kernel_workspace/kernel_platform
+          # 获取内核 Android 版本号(KANDROID_VERSION)以及内核版本号(KERNEL_VERSION)
+          for f in ./common/build.config.constants ./common/build.config.common; do
+            if [ -f "$f" ]; then
+              BRANCH=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
+              [ -n "$BRANCH" ] && break
+            fi
+          done
+
+          if [ -n "$BRANCH" ]; then
+            echo "KANDROID_VERSION=${BRANCH%-*}" >> $GITHUB_ENV
+            echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
+          else
+            echo "No BRANCH found in build.config files"
+          fi
+
+          # 从 Makefile 获取完整内核版本号(TKERNEL_VERSION)以及可选的修改内核等级
+          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+
+          # 强制修改 SUBLEVEL(内核等级)，默认关闭
+          # sed -i 's/^SUBLEVEL[[:space:]]*=[[:space:]]*.*/SUBLEVEL = 99/' ./common/Makefile
+
+          # 读取修改后的版本
+          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+
+          if [ "$ORIG_VERSION" != "$NEW_VERSION" ]; then
+            echo "Kernel Version:$ORIG_VERSION->$NEW_VERSION"
+            echo "TKERNEL_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          else
+            echo "Kernel Version:$ORIG_VERSION No changes"
+            echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
+          fi
+
+
+          # 内核版本的数字转换(对比用)
+          echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
+          echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
+          echo "KV3=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
+
+
+
       - name: Apply Unicode bypass Fix
         if: ${{inputs.enable_Unicode_bypass_Fix }}
         run: |
          cd kernel_workspace/kernel_platform
-         git clone https://github.com/ITxiao6666/Unicode_bypass_Fix.git
+         git clone https://$TOKEN@github.com/JiuGeFaCai/Unicode_bypass_Fix.git
          cp ./Unicode_bypass_Fix/unicode_bypass_fix_5.10-6.1.patch ./common/
          cd ./common
-         patch -p1 -F 3 < unicode_bypass_fix_5.10-6.1.patch
+         if [ "$KV1" -lt 6 ]; then
+            cp ../Unicode_bypass_Fix/unicode_bypass_fix_6.1-.patch ./
+            echo "Patching unicode!"
+            patch -p1 --forward < "unicode_bypass_fix_6.1-.patch"
+          else
+            cp ../Unicode_bypass_Fix/unicode_bypass_fix_6.1+.patch ./
+            echo "Patching unicode!"
+            patch -p1 --forward < "unicode_bypass_fix_6.1+.patch"
+          fi
            
       - name: Add SUSFS Configuration Settings
         run: |
@@ -317,6 +368,6 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
+         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}_(${{ env.TKERNEL_VERSION }})
          path: ./AnyKernel3/*
          

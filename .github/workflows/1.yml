@@ -297,14 +297,27 @@ jobs:
             echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
           fi
 
+
+          # 内核版本的数字转换(对比用)
+          echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
+          echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
+          echo "KV3=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
+
       - name: Apply Unicode bypass Fix
         if: ${{inputs.enable_Unicode_bypass_Fix }}
         run: |
          cd kernel_workspace
-         git clone https://github.com/ITxiao6666/Unicode_bypass_Fix.git
-         cp ./Unicode_bypass_Fix/unicode_bypass_fix_5.10-6.1.patch ./common/
+         git clone https://$TOKEN@github.com/JiuGeFaCai/Unicode_bypass_Fix.git
          cd ./common
-         patch -p1 -F 3 < unicode_bypass_fix_5.10-6.1.patch
+         if [ "$KV1" -lt 6 ]; then
+            cp ./Unicode_bypass_Fix/unicode_bypass_fix_6.1-.patch ./common/
+            echo "Patching unicode!"
+            patch -p1 --forward < "unicode_bypass_fix_6.1-.patch"
+          else
+            cp ./Unicode_bypass_Fix/unicode_bypass_fix_6.1+.patch ./common/
+            echo "Patching unicode!"
+            patch -p1 --forward < "unicode_bypass_fix_6.1+.patch"
+          fi
          
       - name: Add SUSFS Configuration Settings
         run: |

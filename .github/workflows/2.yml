@@ -199,7 +199,6 @@ jobs:
         run: |
          cd kernel_workspace/kernel_platform
          git clone https://$TOKEN@github.com/JiuGeFaCai/Unicode_bypass_Fix.git
-         cp ./Unicode_bypass_Fix/unicode_bypass_fix_5.10-6.1.patch ./common/
          cd ./common
          if [ "$KV1" -lt 6 ]; then
             cp ../Unicode_bypass_Fix/unicode_bypass_fix_6.1-.patch ./

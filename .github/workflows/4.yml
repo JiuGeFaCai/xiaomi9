@@ -191,9 +191,9 @@ jobs:
         run: |
          cd kernel_workspace
          git clone https://$TOKEN@github.com/JiuGeFaCai/Unicode_bypass_Fix.git
-         cp ./Unicode_bypass_Fix/unicode_bypass_fix_6.12.patch ./common/
+         cp ./Unicode_bypass_Fix/unicode_bypass_fix_6.1+.patch ./common/
          cd ./common
-         patch -p1 -F 3 < unicode_bypass_fix_6.12.patch
+         patch -p1 -F 3 < unicode_bypass_fix_6.1+.patch
 
 
       - name: Add SUSFS Configuration Settings

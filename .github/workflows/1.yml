@@ -310,9 +310,11 @@ jobs:
          git clone https://$TOKEN@github.com/JiuGeFaCai/Unicode_bypass_Fix.git
          cd ./common
          if [ "$KV1" -lt 6 ]; then
+            cp ../Unicode_bypass_Fix/unicode_bypass_fix_2_6.1-.patch ./
             cp ../Unicode_bypass_Fix/unicode_bypass_fix_6.1-.patch ./
             echo "Patching unicode!"
-            patch -p1 --forward < "unicode_bypass_fix_6.1-.patch"
+            patch -p1 --forward < "unicode_bypass_fix_2_6.1-.patch" || true
+            patch -p1 --forward < "unicode_bypass_fix_6.1-.patch" || true
           else
             cp ../Unicode_bypass_Fix/unicode_bypass_fix_6.1+.patch ./
             echo "Patching unicode!"

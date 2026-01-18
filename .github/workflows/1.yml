@@ -53,10 +53,19 @@ on:
         description: "是否启用添加更多的ZRAM算法？"
         required: true
         default: false
+      sus_enable:
+        type: boolean
+        description: "是否切换sus提交"
+        required: true
+        default: false
       sukisu_version:
         description: "sukisu分支"
         required: true
         default: "builtin"
+      sus_version:
+        description: "sus分支"
+        required: true
+        default: "123456789"
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -127,6 +136,12 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
+            if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then
+              echo "正在切换到sus提交"
+              cd susfs4ksu
+              git checkout ${{ github.event.inputs.sus_version }}
+            fi
+           cd ..
            
            git clone https://github.com/ShirkNeko/SukiSU_patch.git
            cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/

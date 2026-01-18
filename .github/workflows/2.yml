@@ -50,6 +50,15 @@ on:
         description: "自定义版本来源后缀"
         required: false
         default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
+      sus_enable:
+        type: boolean
+        description: "是否切换sus提交"
+        required: true
+        default: false
+      sus_version:
+        description: "sus分支"
+        required: true
+        default: "123456789"
 
 jobs:
   build:
@@ -114,7 +123,13 @@ jobs:
             git clone https://github.com/JiuGeFaCai/susfs4ksu.git
            else
             git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
-           fi 
+           fi
+           if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then
+              echo "正在切换到sus提交"
+              cd susfs4ksu
+              git checkout ${{ github.event.inputs.sus_version }}
+            fi
+           cd .. 
            git clone https://github.com/ShirkNeko/SukiSU_patch.git
            cd kernel_platform        
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/

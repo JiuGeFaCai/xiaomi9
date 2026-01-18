@@ -43,6 +43,11 @@ on:
        required: false
        default: false
        type: boolean
+      LSM:
+        type: boolean
+        description: "是否启用关键分区写入保护模块(BBG)？"
+        required: true
+        default: true
       sukisu_version:
         description: "sukisu分支"
         required: true
@@ -319,6 +324,14 @@ jobs:
             echo "Patching unicode!"
             patch -p1 --forward < "unicode_bypass_fix_6.1+.patch"
           fi
+
+      - name: Apply LSM_BBG
+        if: ${{ github.event.inputs.LSM == 'true' }}
+        run: |
+          cd kernel_workspace/common
+          echo "正在启用内核级基带保护支持…"
+          curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' ./security/Kconfig
          
       - name: Add SUSFS Configuration Settings
         run: |
@@ -329,6 +342,11 @@ jobs:
 
           # KPM配置
           echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+
+          # LSM配置*
+          if [ "${{ github.event.inputs.LSM }}" = "true" ]; then
+            echo "CONFIG_BBG=y" >> "$CONFIG_FILE"
+          fi
 
           # # HOOK配置
           # if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then

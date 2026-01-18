@@ -47,7 +47,7 @@ on:
         type: boolean
         description: "是否启用关键分区写入保护模块(BBG)？"
         required: true
-        default: true
+        default: false
       ZRAM:
         type: boolean
         description: "是否启用添加更多的ZRAM算法？"

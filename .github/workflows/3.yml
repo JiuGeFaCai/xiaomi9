@@ -162,8 +162,9 @@ jobs:
               echo "正在切换到sus提交"
               cd susfs4ksu
               git checkout ${{ github.event.inputs.sus_version }}
+              cd ..
             fi
-           cd ..
+
            git clone https://github.com/SukiSU-Ultra/SukiSU_patch.git
            git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
 

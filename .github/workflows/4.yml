@@ -131,8 +131,8 @@ jobs:
               echo "正在切换到sus提交"
               cd susfs4ksu
               git checkout ${{ github.event.inputs.sus_version }}
+              cd ..
             fi
-           cd ..
            
            git clone https://github.com/ShirkNeko/SukiSU_patch.git
            cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android16-6.12.patch ./common/

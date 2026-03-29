@@ -121,7 +121,7 @@ jobs:
       - name: Set up SukiSU
         run: |
          cd kernel_workspace
-         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
+         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
          cd KernelSU
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
          # 使用正确变量名 KSU_VERSION_API 替换函数体

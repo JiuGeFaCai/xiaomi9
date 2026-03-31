@@ -38,6 +38,11 @@ on:
        required: false
        default: false
        type: boolean
+      enable_lsm:
+       description: "lsm"
+       required: false
+       default: false
+       type: boolean
       enable_Unicode_bypass_Fix:
        description: "零宽字符漏洞的修复补丁"
        required: false
@@ -295,6 +300,15 @@ jobs:
          cp ./sturdy-journey/fix.patch ./common/
          cd ./common
          patch -p1 -F 3 < fix.patch
+
+      - name: lsm
+        if: ${{inputs.enable_lsm }}
+        run: |
+         cd kernel_workspace
+         git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
+         cp ./sturdy-journey/lsm.patch ./common/
+         cd ./common
+         patch -p1 -F 3 < lsm.patch
 
       - name: Kernel Version Handling
         run: |

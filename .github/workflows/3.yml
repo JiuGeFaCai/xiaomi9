@@ -157,7 +157,7 @@ jobs:
       - name: Set up susfs
         run: |
            cd kernel_workspace
-           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6
+           git clone -b oki-android15-6.6 https://github.com/cctv18/susfs4oki.git susfs4ksu
            if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then
               echo "正在切换到sus提交"
               cd susfs4ksu

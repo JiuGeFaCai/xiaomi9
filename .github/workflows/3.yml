@@ -33,6 +33,11 @@ on:
        required: false
        default: true
        type: boolean
+      baseband_guard:
+        description: '是否开启内核级基带保护(阻止一切对非用户分区的写入，有效防止格机)'
+        required: true
+        type: boolean
+        default: 'true'
       enable_Unicode_bypass_Fix:
        description: "零宽字符漏洞的修复补丁"
        required: false
@@ -222,6 +227,16 @@ jobs:
           cp ../../SukiSU_patch/other/zram/zram_patch/6.6/lz4kd.patch ./
           patch -p1 -F 3 < lz4kd.patch || true
           fi
+
+      - name: 启用内核级基带保护
+        if: inputs.baseband_guard
+        run: |
+          echo "正在启用启用内核级基带保护支持…"
+          cd kernel_workspace/kernel_platform
+          echo "CONFIG_BBG=y" >> ./common/arch/arm64/configs/gki_defconfig
+          cd ./common
+          curl -sSL https://github.com/cctv18/Baseband-guard/raw/master/setup.sh | bash
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 
       - name: Apply Unicode bypass Fix
         if: ${{inputs.enable_Unicode_bypass_Fix }}

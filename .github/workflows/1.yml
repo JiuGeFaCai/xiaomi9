@@ -117,7 +117,7 @@ jobs:
          repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.ci_VERSION }} --repo-rev=v2.16
          if ${{inputs.enable_deprecated }}; then
          cd .repo/manifests
-         sed -i "/name=\"kernel\/common\"/ s|revision=\"[^\"]*\"|revision=\"${github.event.inputs.ci_VERSION}\"|" default.xml
+         sed -i "/name=\"kernel\/common\"/ s|revision=\"[^\"]*\"|revision=\"deprecated/${{ github.event.inputs.ci_VERSION }}\"|" default.xml
          cd ../../
          fi
          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags

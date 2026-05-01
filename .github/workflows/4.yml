@@ -111,16 +111,6 @@ jobs:
          cd kernel_workspace
          sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s ${{ github.event.inputs.sukisu_version }}
-         cd KernelSU
-         TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
-         # 使用正确变量名 KSU_VERSION_API 替换函数体
-         sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Kbuild
-         KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 37185)
-         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-         export KSU_VERSION=$KSU_VERSION
-         echo "? Injected custom version: v$(KSU_VERSION)@$TAG_SUFFIX"
-         
-         
          
       - name: Set up susfs
         run: |

@@ -122,7 +122,7 @@ jobs:
            if [ "${{ github.event.inputs.CPU }}" = "sm8750" ]; then
             git clone https://github.com/JiuGeFaCai/susfs4ksu.git
            else
-            git clone -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }} https://github.com/cctv18/susfs4oki.git susfs4ksu
+            git clone -b oki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }} https://github.com/cctv18/susfs4oki.git susfs4ksu
             # git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
            fi
            if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then

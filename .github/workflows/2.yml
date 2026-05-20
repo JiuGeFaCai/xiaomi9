@@ -102,6 +102,59 @@ jobs:
          repo --trace sync -c -j$(nproc --all) --no-tags
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+      - name: Kernel Version Handling
+        run: |
+          cd kernel_workspace/kernel_platform
+          # 获取内核 Android 版本号(KANDROID_VERSION)以及内核版本号(KERNEL_VERSION)
+          for f in ./common/build.config.constants ./common/build.config.common; do
+            if [ -f "$f" ]; then
+              KMI=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
+              [ -n "$KMI" ] && break
+            fi
+          done
+          if [[ -z "$KMI" && -n "$KERNEL_REPOS" ]]; then
+            KMI=$(grep -m1 '^android' "./$KERNEL_REPOS/android/ACK_SHA" | cut -d- -f1,2)
+          fi
+          if [ -n "$KMI" ]; then
+            echo "KMI=$KMI" >> $GITHUB_ENV
+            echo "KANDROID_VERSION=${KMI%-*}" >> $GITHUB_ENV
+            echo "KERNEL_VERSION=${KMI#*-}" >> $GITHUB_ENV
+          else
+            echo "No KMI found in build.config* and ACK_SHA files"
+          fi
+
+          # 从 Makefile 获取完整内核版本号(TKERNEL_VERSION)以及可选的修改内核等级
+          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+
+          # 强制修改 SUBLEVEL(内核等级)
+          SUBLEVEL_INPUT="${{ github.event.inputs.SUBLEVEL }}"
+          if [ -n "$SUBLEVEL_INPUT" ]; then
+            echo "修改 SUBLEVEL 为 $SUBLEVEL_INPUT"
+            sed -i "s/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\1$SUBLEVEL_INPUT/" ./common/Makefile
+          else
+            echo "未指定 SUBLEVEL，保持默认"
+          fi
+
+          # 读取修改后的版本
+          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+
+          if [ "$ORIG_VERSION" != "$NEW_VERSION" ]; then
+            echo "Kernel Version:$ORIG_VERSION->$NEW_VERSION"
+            echo "TKERNEL_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          else
+            echo "Kernel Version:$ORIG_VERSION No changes"
+            echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
+          fi
+
+          # 内核版本的数字转换(对比用)
+          echo "KV1=${KMI#*-}"       | cut -d. -f1 >> $GITHUB_ENV
+          echo "KV2=${KMI#*-}"       | tr -d '.' >> $GITHUB_ENV
+          echo "KV3=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
+          echo "KERNEL_SHORT_PATCH_VERSION=$(echo $NEW_VERSION | cut -d. -f1,2 | tr '.' '_')" >> $GITHUB_ENV
+
+
+
          
       - name: Set up SukiSU
         run: |
@@ -147,12 +200,106 @@ jobs:
            fi
 
            # Apply patches
-           cd ./common       
+           cd ./common
+
+           if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ]; then
+            # Fake Patch to fix failures
+            fake_patched=0
+            fake_patched_dist=0
+            fake_patched_swap=0
+            fake_patched_ns=0
+            fake_patched_expand=0
+            if [ "$KMI" = "android15-6.6" ]; then
+              if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+                echo "未找到 nr_subpages，正在进行补丁修复"
+                sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
+                fake_patched=1
+              fi
+              if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+                echo "未找到 #include <linux/dma-buf.h>，添加缺失的头文件"
+                sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
+              fi
+              if ! grep -qxF '#include <linux/zswap.h>' ./mm/memory.c; then
+                echo "未找到 #include <linux/zswap.h>，添加缺失的头文件"
+                sed -i '/#include <linux\/sched\/sysctl\.h>/a #include <linux\/zswap.h>' ./mm/memory.c
+                fake_patched_swap=1
+              fi
+              if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c && ! grep -qxF 'susfs_def.h' ./fs/namespace.c; then
+                echo "未找到 #include <trace/hooks/fs.h>，添加缺失的头文件"
+                sed -i '/#include <trace\/hooks\/blk\.h>/a #include <trace\/hooks\/fs.h>' ./fs/namespace.c
+                fake_patched_ns=1
+              fi
+              if grep -qF 'if (vma->vm_end > last_vma_end)' ./fs/proc/task_mmu.c && ! grep -qF 'if (vma->vm_end > last_vma_end) {' ./fs/proc/task_mmu.c; then
+                echo "临时展开 last_vma_end if 块，修复匹配问题"
+                perl -i -0pe 's/\t\t\tif \(vma->vm_end > last_vma_end\)\n\t\t\t\tsmap_gather_stats\(vma, &mss, last_vma_end\);/\t\t\tif (vma->vm_end > last_vma_end) {\n\t\t\t\tsmap_gather_stats(vma, \&mss, last_vma_end);\n\t\t\t\tlast_vma_end = vma->vm_end;\n\t\t\t}/' ./fs/proc/task_mmu.c
+                fake_patched_expand=1
+              fi
+            fi
+            if [ "$KMI" = "android14-6.1" ]; then
+              if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+                echo "未找到 vma_pages，正在进行补丁修复"
+                fake_patched=1
+              fi
+              if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+                echo "未找到 #include <linux/dma-buf.h>，添加缺失的头文件"
+                sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
+              fi
+            fi
+            if [ "$KMI" = "android12-5.10" ] || [ "$KMI" = "android13-5.15" ]; then
+              if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+                echo "未找到 vma_pages，正在进行补丁修复"
+                fake_patched=1
+              fi
+            fi
+            if [ "$KMI" = "android13-5.15" ]; then
+              if grep -qxF '#include <linux/swap_slots.h>' ./mm/memory.c && ! grep -qxF '#include <linux/susfs_def.h>' ./mm/memory.c; then
+                echo "发现干扰识别的 swap_slots.h，临时移除"
+                sed -i '/#include <linux\/swap_slots\.h>/d' ./mm/memory.c
+                fake_patched_dist=1
+              fi
+            fi
+
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-           # cp ../../kernel_patches/69_hide_stuff.patch ./
-           #cp ../../SukiSU_patch/hooks/scope_min_manual_hooks_v1.6.patch ./
-           # patch -p1 -F 3 < 69_hide_stuff.patch
-           #patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch
+           # Revert
+            if [ "$fake_patched" = 1 ]; then
+              if [ "$KMI" = "android15-6.6" ]; then
+                if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+                  sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
+                fi
+              fi
+              if [ "$KMI" = "android12-5.10" ] || [ "$KMI" = "android13-5.15" ] || [ "$KMI" = "android14-6.1" ]; then
+                if grep -q 'goto[[:space:]]\+show_pad;' ./fs/proc/task_mmu.c; then
+                  sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+                fi
+              fi
+            fi
+            if [ "$fake_patched_dist" = 1 ]; then
+              if [ "$KMI" = "android13-5.15" ]; then
+                if ! grep -qxF '#include <linux/swap_slots.h>' ./mm/memory.c; then
+                  sed -i '/#ifdef CONFIG_KSU_SUSFS_SUS_MAP/i #include <linux/swap_slots.h>' ./mm/memory.c
+                fi
+              fi
+            fi
+            if [ "$fake_patched_swap" = 1 ]; then
+              if [ "$KMI" = "android15-6.6" ]; then
+                if grep -qxF '#include <linux/zswap.h>' ./mm/memory.c; then
+                  sed -i '/#include <linux\/zswap\.h>/d' ./mm/memory.c
+                fi
+              fi
+            fi
+            if [ "$fake_patched_ns" = 1 ]; then
+              if grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c && ! grep -qxF 'susfs_def.h' ./fs/namespace.c; then
+                sed -i '/#include <trace\/hooks\/fs\.h>/d' ./fs/namespace.c
+              fi
+            fi
+            if [ "$fake_patched_expand" = 1 ]; then
+              if [ "$KMI" = "android15-6.6" ]; then
+                if grep -qF 'if (vma->vm_end > last_vma_end) {' ./fs/proc/task_mmu.c; then
+                  perl -i -0pe 's/\t\t\tif \(vma->vm_end > last_vma_end\) \{\n\t\t\t\tsmap_gather_stats\(vma, &mss, last_vma_end\);\n\t\t\t\tlast_vma_end = vma->vm_end;\n\t\t\t\}/\t\t\tif (vma->vm_end > last_vma_end)\n\t\t\t\tsmap_gather_stats(vma, \&mss, last_vma_end);/' ./fs/proc/task_mmu.c
+                fi
+              fi
+            fi
+           fi
 
       - name: Apply LZ4KD
         if: ${{ github.event.inputs.ZRAM == 'true' }}
@@ -168,49 +315,7 @@ jobs:
             echo 'lz4k_oplus_patch完成'
 
 
-      - name: Kernel Version Handling
-        run: |
-          cd kernel_workspace/kernel_platform
-          # 获取内核 Android 版本号(KANDROID_VERSION)以及内核版本号(KERNEL_VERSION)
-          for f in ./common/build.config.constants ./common/build.config.common; do
-            if [ -f "$f" ]; then
-              BRANCH=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
-              [ -n "$BRANCH" ] && break
-            fi
-          done
-
-          if [ -n "$BRANCH" ]; then
-            echo "KANDROID_VERSION=${BRANCH%-*}" >> $GITHUB_ENV
-            echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
-          else
-            echo "No BRANCH found in build.config files"
-          fi
-
-          # 从 Makefile 获取完整内核版本号(TKERNEL_VERSION)以及可选的修改内核等级
-          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
-
-          # 强制修改 SUBLEVEL(内核等级)，默认关闭
-          # sed -i 's/^SUBLEVEL[[:space:]]*=[[:space:]]*.*/SUBLEVEL = 99/' ./common/Makefile
-
-          # 读取修改后的版本
-          NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
-
-          if [ "$ORIG_VERSION" != "$NEW_VERSION" ]; then
-            echo "Kernel Version:$ORIG_VERSION->$NEW_VERSION"
-            echo "TKERNEL_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          else
-            echo "Kernel Version:$ORIG_VERSION No changes"
-            echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
-          fi
-
-
-          # 内核版本的数字转换(对比用)
-          echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
-          echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
-          echo "KV3=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
-
-
-
+      
       - name: Apply Unicode bypass Fix
         if: ${{inputs.enable_Unicode_bypass_Fix }}
         run: |

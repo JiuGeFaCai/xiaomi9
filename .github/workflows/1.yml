@@ -71,9 +71,9 @@ on:
           - ReSukiSU
         default: ReSukiSU
       sukisu_version:
-        description: "SukiSU/ReSukiSU 分支或提交(builtin/留空为main)"
+        description: "SukiSU/ReSukiSU 分支或提交"
         required: true
-        default: "builtin"
+        default: "main"
       sus_version:
         description: "sus分支"
         required: true

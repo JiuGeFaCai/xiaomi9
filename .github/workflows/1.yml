@@ -6,11 +6,6 @@ on:
         description: "谷歌ci版本"
         required: true
         default: ''
-      enable_deprecated:
-        description: "deprecated修改"
-        required: false
-        default: false
-        type: boolean
       ANDROID_VERSION:
         description: "内核安卓版本"
         required: true
@@ -114,13 +109,17 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://android.googlesource.com/kernel/manifest -b common-${{ github.event.inputs.ci_VERSION }} --repo-rev=v2.16
-         if ${{inputs.enable_deprecated }}; then
-         cd .repo/manifests
-         sed -i "/name=\"kernel\/common\"/ s|revision=\"[^\"]*\"|revision=\"deprecated/${{ github.event.inputs.ci_VERSION }}\"|" default.xml
-         cd ../../
+         FORMATTED_BRANCH="${{ github.event.inputs.ci_VERSION }}"
+         repo init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
+         REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
+         DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+         if grep -q deprecated <<< $REMOTE_BRANCH; then
+         echo "Found deprecated branch: ${FORMATTED_BRANCH}"
+         sed -i 's/"'${FORMATTED_BRANCH}'"/"deprecated\/'${FORMATTED_BRANCH}'"/g' $DEFAULT_MANIFEST_PATH
+         cat $DEFAULT_MANIFEST_PATH
          fi
-         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+         repo --version
+         repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          

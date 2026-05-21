@@ -6,6 +6,16 @@ on:
         description: "谷歌ci版本"
         required: true
         default: 'android16-6.12-2025-06'
+      enable_oneplus_common:
+       description: "是否切换一加内核源码"
+       required: false
+       default: false
+       type: boolean
+      enable_oneplus_patch:
+       description: "是否启用一加补丁"
+       required: false
+       default: true
+       type: boolean
       enable_Unicode_bypass_Fix:
        description: "零宽字符漏洞的修复补丁"
        required: false
@@ -14,7 +24,7 @@ on:
       enable_device_check:
        description: "设备id判断"
        required: false
-       default: true
+       default: false
        type: boolean
       device_tag:
         description: "设备id"
@@ -85,17 +95,18 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         export REPO_URL='https://mirrors.tuna.tsinghua.edu.cn/git/git-repo'
-         repo init --depth=1 --u https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/kernel/manifest -b common-${{ github.event.inputs.ci_VERSION }} --repo-rev=v2.16
-         REMOTE_BRANCH=$(git ls-remote https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/kernel/common ${{ github.event.inputs.ci_VERSION }})
+         FORMATTED_BRANCH="${{ github.event.inputs.ci_VERSION }}"
+         repo init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
+         REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
          DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
          if grep -q deprecated <<< $REMOTE_BRANCH; then
-         echo "Found deprecated branch: ${{ github.event.inputs.ci_VERSION }}"
-         sed -i 's/"'${{ github.event.inputs.ci_VERSION }}'"/"deprecated\/'${{ github.event.inputs.ci_VERSION }}'"/g' $DEFAULT_MANIFEST_PATH
+         echo "Found deprecated branch: ${FORMATTED_BRANCH}"
+         sed -i 's/"'${FORMATTED_BRANCH}'"/"deprecated\/'${FORMATTED_BRANCH}'"/g' $DEFAULT_MANIFEST_PATH
          cat $DEFAULT_MANIFEST_PATH
          fi
          repo --version
-         repo --trace sync -c -j$(nproc --all) --no-tags
+         repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+         if [ "${{ github.event.inputs.enable_oneplus_common }}" = "true" ]; then
          if [ "${{ github.event.inputs.ci_VERSION }}" = "android16-6.12-2025-06" ]; then
          rm -rf common
          git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850.git --depth 1 common
@@ -103,6 +114,7 @@ jobs:
          if [ "${{ github.event.inputs.ci_VERSION }}" = "android16-6.12-2025-09" ]; then
          rm -rf common
          git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8845.git --depth 1 common
+         fi
          fi
 
          
@@ -178,6 +190,7 @@ jobs:
           done
           
       - name: oneplus
+        if: ${{ inputs.enable_oneplus_patch }}
         run: |
          cd kernel_workspace
          git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git

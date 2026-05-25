@@ -148,6 +148,20 @@ jobs:
            # Apply patches
            cd ./common
            patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch || true    
+
+      - name: Fix SUSFS exec.c header
+        run: |
+          cd kernel_workspace/common
+          if grep -q 'susfs_is_current_proc_umounted' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
+            if grep -qF '#include <linux/dma-buf.h>' ./fs/exec.c; then
+              sed -i '/#include <linux\/dma-buf.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
+            else
+              sed -i '/#include <linux\/ksm.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
+            fi
+            echo "已修复 exec.c 缺少 susfs_def.h 问题"
+          else
+            echo "exec.c 无需修复或已包含 susfs_def.h"
+          fi
       
       # - name: Apply HOOK
       #   run: |

@@ -105,7 +105,7 @@ jobs:
       - name: Install dependencies
         run: |
          sudo apt-mark hold firefox
-         sudo apt update && sudo apt upgrade -y
+         sudo apt update
          sudo apt install -y curl ccache git python3 repo libelf-dev
         
       - name: Install repo tool

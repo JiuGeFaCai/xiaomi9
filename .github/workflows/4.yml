@@ -131,8 +131,9 @@ jobs:
          cd kernel_workspace
          sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+         cd KernelSU
          KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
-         echo "KSUVER=${KSU_VERSION}_${{ matrix.FEIL }}" >> $GITHUB_ENV
+         echo "KSUVER=${KSU_VERSION}_${{ github.event.inputs.device_tag }}" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
          
       - name: Set up susfs
@@ -286,7 +287,7 @@ jobs:
         if: ${{ github.event.inputs.KERNEL_NAME != '' }}
         run: |
          cd kernel_workspace
-         if [ "${{ github.event.inputs.KERNEL_VERSION }}" != "6.6" ]; then
+         if [ "6.12" != "6.6" ]; then
          sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
          else
          sed -i '$s|${file_localversion}|${{ github.event.inputs.KERNEL_NAME }}|' ./common/scripts/setlocalversion
@@ -303,7 +304,7 @@ jobs:
 
       - name: Make AnyKernel3
         run: |
-         OUTDIR=kernel_workspace/out/${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}/dist
+         OUTDIR=kernel_workspace/out/android16-6.12/dist
          if [ ! -e $OUTDIR ]; then
            OUTDIR=kernel_workspace/dist
          fi

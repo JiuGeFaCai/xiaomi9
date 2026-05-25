@@ -118,6 +118,13 @@ jobs:
          fi
          fi
 
+      - name: Kernel Version Handling
+        run: |
+          cd kernel_workspace
+          ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
+          echo "Kernel Version:$ORIG_VERSION"
+          echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
+
          
       - name: Set up SukiSU
         run: |
@@ -316,7 +323,7 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}_android16-6-12_${{ github.event.inputs.device_tag }}
+         name: SuKiSu_${{ env.KSUVER }}_android16-(${{ env.TKERNEL_VERSION }})_${{ github.event.inputs.device_tag }}
          path: ./AnyKernel3/*
          
       - name: Upload Image

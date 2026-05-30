@@ -199,7 +199,7 @@ jobs:
             fi
            fi
            
-           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
+           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch
 
            if [ "$fake_patched" = 1 ]; then
             if [ "${{ matrix.FEIL }}" = "oneplus_pad_2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then
@@ -407,11 +407,11 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}
+         name: ReSuKiSu_${{ env.KSUVER }}
          path: ./AnyKernel3/*
          
       - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
-         name: Image_SuKiSu_${{ env.KSUVER }}
+         name: Image_ReSuKiSu_${{ env.KSUVER }}
          path: kernel_workspace/kernel_platform/dist/Image

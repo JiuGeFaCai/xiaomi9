@@ -199,7 +199,7 @@ jobs:
             fi
            fi
            
-           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch
+           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
 
            if [ "$fake_patched" = 1 ]; then
             if [ "${{ matrix.FEIL }}" = "oneplus_pad_2_pro" ] || [ "${{ matrix.FEIL }}" = "oneplus_ace5_ultra" ]; then

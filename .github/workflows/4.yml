@@ -155,7 +155,7 @@ jobs:
 
            # Apply patches
            cd ./common
-           patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch
+           patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch || true
 
       - name: Fix SUSFS exec.c header
         run: |

@@ -2,10 +2,17 @@ name: OnePlus SM8750 Build SuKiSu SUSFS
 on:
   workflow_dispatch:
     inputs:
+      ksu_variant:
+        description: "KernelSU 变体"
+        type: choice
+        options:
+          - SukiSU
+          - ReSukiSU
+        default: ReSukiSU
       sukisu_version:
-        description: "sukisu分支"
+        description: "SukiSU/ReSukiSU 分支或提交"
         required: true
-        default: 'builtin'
+        default: "main"
       KERNEL_NAME:
         description: "修改内核名称"
         required: true
@@ -147,13 +154,32 @@ jobs:
       - name: Set up SukiSU
         run: |
          cd kernel_workspace/kernel_platform
-         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+         KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
+         KSU_REF="${{ github.event.inputs.sukisu_version }}"
+         if [ -z "$KSU_REF" ] || [ "$KSU_REF" = "builtin" ]; then
+           KSU_REF="main"
+         fi
+         case "$KSU_VARIANT" in
+           "SukiSU")
+             echo "添加 SukiSU..."
+             curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_REF"
+             ;;
+           "ReSukiSU")
+             echo "添加 ReSukiSU..."
+             curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s "$KSU_REF"
+             ;;
+           *)
+             echo "未知 KernelSU 变体: $KSU_VARIANT"
+             exit 1
+             ;;
+         esac
          cd KernelSU
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
          # 使用正确变量名 KSU_VERSION_API 替换函数体
          sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Kbuild
-         KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
+         KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
          echo "KSUVER=${KSU_VERSION}_${{ matrix.FEIL }}" >> $GITHUB_ENV
+         echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
          echo "✅ Injected custom version: v${KSU_VERSION}@$TAG_SUFFIX"
          

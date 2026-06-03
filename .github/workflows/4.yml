@@ -44,10 +44,17 @@ on:
         description: "自定义版本来源后缀"
         required: false
         default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
+      ksu_variant:
+        description: "KernelSU 变体"
+        type: choice
+        options:
+          - SukiSU
+          - ReSukiSU
+        default: ReSukiSU
       sukisu_version:
-        description: "sukisu分支"
+        description: "SukiSU/ReSukiSU 分支或提交"
         required: true
-        default: "builtin"
+        default: "main"
       sus_enable:
         type: boolean
         description: "是否切换sus提交"
@@ -130,10 +137,29 @@ jobs:
         run: |
          cd kernel_workspace
          sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
-         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+         KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
+         KSU_REF="${{ github.event.inputs.sukisu_version }}"
+         if [ -z "$KSU_REF" ] || [ "$KSU_REF" = "builtin" ]; then
+           KSU_REF="main"
+         fi
+         case "$KSU_VARIANT" in
+           "SukiSU")
+             echo "添加 SukiSU..."
+             curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_REF"
+             ;;
+           "ReSukiSU")
+             echo "添加 ReSukiSU..."
+             curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s "$KSU_REF"
+             ;;
+           *)
+             echo "未知 KernelSU 变体: $KSU_VARIANT"
+             exit 1
+             ;;
+         esac
          cd KernelSU
-         KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
+         KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
          echo "KSUVER=${KSU_VERSION}_${{ github.event.inputs.device_tag }}" >> $GITHUB_ENV
+         echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
          
       - name: Set up susfs

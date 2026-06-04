@@ -271,6 +271,12 @@ jobs:
           else
             echo "exec.c 无需修复或已包含 susfs_def.h"
           fi
+
+      - name: Fix SukiSU SUSFS compatibility
+        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+        run: |
+         set -euo pipefail
+         python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace"
       
       # - name: Apply HOOK
       #   run: |
@@ -425,7 +431,7 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: ReSuKiSu_${{ env.KSUVER }}_android16-(${{ env.TKERNEL_VERSION }})_${{ github.event.inputs.device_tag }}
+         name: ReSuKiSu_${{ env.KSUVER }}_android16-(${{ env.TKERNEL_VERSION }})
          path: ./AnyKernel3/*
          
       - name: Upload Image

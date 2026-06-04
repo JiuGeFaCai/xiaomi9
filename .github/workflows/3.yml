@@ -88,6 +88,9 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
           
       - name: Configure Git
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
@@ -243,8 +246,14 @@ jobs:
            fi
 
            #patch -p1 -F 3 < scope_min_manual_hooks_v1.6.patch
-           
+
            echo "完成"
+
+      - name: Fix SukiSU SUSFS compatibility
+        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+        run: |
+         set -euo pipefail
+         python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform"
 
       - name: Apply lz4kd Patches
         run: |

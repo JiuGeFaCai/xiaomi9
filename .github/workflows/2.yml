@@ -85,6 +85,9 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
           
       - name: Configure Git
         run: |
@@ -335,6 +338,12 @@ jobs:
               fi
             fi
            fi
+
+      - name: Fix SukiSU SUSFS compatibility
+        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform"
 
       - name: Apply LZ4KD
         if: ${{ github.event.inputs.ZRAM == 'true' }}

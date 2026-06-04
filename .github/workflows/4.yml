@@ -161,6 +161,81 @@ jobs:
          echo "KSUVER=${KSU_VERSION}_${{ github.event.inputs.device_tag }}" >> $GITHUB_ENV
          echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
+
+      - name: Fix SukiSU 6.12 compatibility
+        if: ${{ startsWith(github.event.inputs.ci_VERSION, 'android16-6.12') && (github.event.inputs.ksu_variant == 'SukiSU' || github.event.inputs.ksu_variant == 'ReSukiSU') }}
+        run: |
+         cd kernel_workspace
+         python3 - <<'PY'
+         from pathlib import Path
+
+         changed = False
+         ksu_dirs = [
+             Path("common/drivers/kernelsu"),
+             Path("drivers/kernelsu"),
+             Path("KernelSU/kernel"),
+         ]
+
+         netlink_h = Path("common/include/linux/netlink.h")
+         netlink_text = netlink_h.read_text(errors="ignore") if netlink_h.exists() else ""
+         if netlink_h.exists() and "cb_mutex" not in netlink_text:
+             for ksu_dir in ksu_dirs:
+                 super_access_c = ksu_dir / "kpm/super_access.c"
+                 if not super_access_c.exists():
+                     continue
+                 text = super_access_c.read_text()
+                 line = "DEFINE_MEMBER(netlink_kernel_cfg, cb_mutex)\n"
+                 if line in text:
+                     super_access_c.write_text(text.replace(line, "", 1))
+                     changed = True
+                     print(f"Removed missing netlink_kernel_cfg.cb_mutex probe: {super_access_c}")
+
+         lsm_hooks_h = Path("common/include/linux/lsm_hooks.h")
+         lsm_hooks_text = lsm_hooks_h.read_text(errors="ignore") if lsm_hooks_h.exists() else ""
+         if "const struct lsm_id *lsmid" in lsm_hooks_text:
+             for ksu_dir in ksu_dirs:
+                 lsm_hook_c = ksu_dir / "hook/lsm_hook.c"
+                 if not lsm_hook_c.exists():
+                     continue
+                 text = lsm_hook_c.read_text()
+                 old_call = '    security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");'
+                 if old_call not in text or "ksu_lsmid" in text:
+                     continue
+                 anchor = "\nvoid __init ksu_lsm_hook_init(void)\n"
+                 old_block = (
+                     "#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)\n"
+                     f"{old_call}\n"
+                     "#else"
+                 )
+                 new_block = (
+                     "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)\n"
+                     "    security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), &ksu_lsmid);\n"
+                     "#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)\n"
+                     f"{old_call}\n"
+                     "#else"
+                 )
+                 lsmid_block = "\n".join([
+                     "",
+                     "/* Android 16 / 6.12 security_add_hooks() expects struct lsm_id. */",
+                     "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)",
+                     "static const struct lsm_id ksu_lsmid = {",
+                     '    .name = "ksu",',
+                     "    .id = 0,",
+                     "};",
+                     "#endif",
+                     "",
+                 ])
+                 if anchor not in text or old_block not in text:
+                     continue
+                 text = text.replace(anchor, lsmid_block + anchor, 1)
+                 text = text.replace(old_block, new_block, 1)
+                 lsm_hook_c.write_text(text)
+                 changed = True
+                 print(f"Adapted security_add_hooks lsm_id argument: {lsm_hook_c}")
+
+         if not changed:
+             print("SukiSU 6.12 compatibility fix did not need changes.")
+         PY
          
       - name: Set up susfs
         run: |

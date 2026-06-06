@@ -126,6 +126,10 @@ jobs:
          rm -rf common
          git clone https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8845.git --depth 1 common
          fi
+         if [ "${{ github.event.inputs.ci_VERSION }}" = "android16-6.12-2025-12" ]; then
+         rm -rf common
+         git clone https://github.com/OnePlusOSS/android_kernel_oneplus_mt6993.git --depth 1 common
+         fi
          fi
 
       - name: Kernel Version Handling

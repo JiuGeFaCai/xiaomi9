@@ -55,6 +55,15 @@ on:
         description: "SukiSU/ReSukiSU 分支或提交"
         required: true
         default: "main"
+      kpm_enable:
+        description: '是否开启kpm(builtin-使用(re)sukisu内置kpm, kpn-使用独立kpm实现(支持任意KSU/面具环境); 不需要可保持默认关闭)'
+        required: true
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'builtin'
+          - 'kpn'
       sus_enable:
         type: boolean
         description: "是否切换sus提交"
@@ -363,7 +372,11 @@ jobs:
           echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
 
           # KPM配置
-          echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+          KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
+          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
+          if [ "$KPM_ENABLE" = "builtin" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "ReSukiSU" ]; }; then
+            echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+          fi
 
           # # HOOK配置
           # if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
@@ -418,22 +431,48 @@ jobs:
 
       - name: Make AnyKernel3
         run: |
-         OUTDIR=kernel_workspace/out/android16-6.12/dist
-         if [ ! -e $OUTDIR ]; then
-           OUTDIR=kernel_workspace/dist
+         set -euo pipefail
+         OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/out/android16-6.12/dist"
+         if [ ! -f "$OUTDIR/Image" ]; then
+           OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/dist"
          fi
-         mkdir output
-         cp $OUTDIR/Image ./output/
-         cd output
-         curl -LSs "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.13.0/patch_linux" -o patch_linux
-         chmod +x patch_linux
-         ./patch_linux
-         rm -f Image
-         mv oImage Image
-         cd ..
+         if [ ! -f "$OUTDIR/Image" ]; then
+           echo "未找到 Image: $OUTDIR/Image"
+           exit 1
+         fi
+
+         KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
+         if [ "$KPM_ENABLE" = "builtin" ]; then
+           echo "正在应用内置 KPM 并修补内核: $OUTDIR/Image"
+           cd "$OUTDIR"
+           curl -LO "https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/latest/download/patch_linux"
+           chmod +x patch_linux
+           ./patch_linux
+           rm -f Image
+           mv oImage Image
+         elif [ "$KPM_ENABLE" = "kpn" ]; then
+           echo "正在应用 KP-N 并修补内核: $OUTDIR/Image"
+           cd "$OUTDIR"
+           wget "https://github.com/KernelSU-Next/KPatch-Next/releases/latest/download/kptools-linux"
+           wget "https://github.com/KernelSU-Next/KPatch-Next/releases/latest/download/kpimg-linux"
+           chmod +x ./kptools-linux
+           ./kptools-linux -p -i ./Image -k ./kpimg-linux -o ./oImage
+           rm -f Image
+           mv oImage Image
+         else
+           echo "KPM 未启用，跳过内核修补"
+         fi
+
+         cd "$GITHUB_WORKSPACE"
+         mkdir -p output
+         cp "$OUTDIR/Image" ./output/
          git clone https://github.com/WildPlusKernel/AnyKernel3.git --depth=1
          rm -rf ./AnyKernel3/.git
          cp ./output/Image ./AnyKernel3/
+         if [ "$KPM_ENABLE" = "kpn" ]; then
+           cd ./AnyKernel3
+           wget "https://github.com/cctv18/KPatch-Next/releases/latest/download/kpn.zip"
+         fi
 
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4

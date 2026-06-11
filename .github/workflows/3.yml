@@ -53,7 +53,7 @@ on:
         description: '是否开启内核级基带保护(阻止一切对非用户分区的写入，有效防止格机)'
         required: false
         type: boolean
-        default: 'true'
+        default: false
       enable_Unicode_bypass_Fix:
        description: "零宽字符漏洞的修复补丁"
        required: false

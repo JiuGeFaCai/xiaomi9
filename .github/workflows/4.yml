@@ -21,15 +21,6 @@ on:
        required: false
        default: false
        type: boolean
-      enable_device_check:
-       description: "设备id判断"
-       required: false
-       default: false
-       type: boolean
-      device_tag:
-        description: "设备id"
-        required: false
-        default: "123456"
       KERNEL_NAME:
         type: string
         description: "自定义内核后缀 (留空则使用随机字符串)"
@@ -174,7 +165,7 @@ jobs:
          esac
          cd KernelSU
          KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
-         echo "KSUVER=${KSU_VERSION}_${{ github.event.inputs.device_tag }}" >> $GITHUB_ENV
+         echo "KSUVER=${KSU_VERSION}" >> $GITHUB_ENV
          echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
 
@@ -344,14 +335,14 @@ jobs:
          cd ./common
          patch -p1 -F 3 < lsm.patch
 
-      - name: sb
-        if: ${{ inputs.enable_device_check }}
-        run: |
-         cd kernel_workspace/common/drivers
-         git clone https://$TOKEN@github.com/JiuGeFaCai/device_check.git --depth 1
-         TAG_DEVICE="${{ github.event.inputs.device_tag }}"
-         sed -i "s/a2cbba3e/$TAG_DEVICE/g" device_check/serial_check.c
-         echo "obj-y				+= device_check/" >> Makefile
+      # - name: sb
+      #   if: ${{ inputs.enable_device_check }}
+      #   run: |
+      #    cd kernel_workspace/common/drivers
+      #    git clone https://$TOKEN@github.com/JiuGeFaCai/device_check.git --depth 1
+      #    TAG_DEVICE="${{ github.event.inputs.device_tag }}"
+      #    sed -i "s/a2cbba3e/$TAG_DEVICE/g" device_check/serial_check.c
+      #    echo "obj-y				+= device_check/" >> Makefile
 
 
       - name: Apply Unicode bypass Fix

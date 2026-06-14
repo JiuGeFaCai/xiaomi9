@@ -180,9 +180,6 @@ jobs:
          cd kernel_workspace/kernel_platform
          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
          KSU_REF="${{ github.event.inputs.sukisu_version }}"
-         if [ -z "$KSU_REF" ] || [ "$KSU_REF" = "builtin" ]; then
-           KSU_REF="main"
-         fi
          case "$KSU_VARIANT" in
            "SukiSU")
              echo "添加 SukiSU..."

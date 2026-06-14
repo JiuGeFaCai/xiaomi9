@@ -151,9 +151,6 @@ jobs:
          sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
          KSU_REF="${{ github.event.inputs.sukisu_version }}"
-         if [ -z "$KSU_REF" ] || [ "$KSU_REF" = "builtin" ]; then
-           KSU_REF="main"
-         fi
          case "$KSU_VARIANT" in
            "SukiSU")
              echo "添加 SukiSU..."
@@ -287,11 +284,11 @@ jobs:
             echo "exec.c 无需修复或已包含 susfs_def.h"
           fi
 
-      - name: Fix SukiSU SUSFS compatibility
-        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
-        run: |
-         set -euo pipefail
-         python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace"
+      # - name: Fix SukiSU SUSFS compatibility
+      #   if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+      #   run: |
+      #    set -euo pipefail
+      #    python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace"
       
       # - name: Apply HOOK
       #   run: |

@@ -142,6 +142,45 @@ jobs:
          repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+      - name: Fix vm_flags_clear for android13 5.15.167
+        working-directory: kernel_workspace/common
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android13" ] && \
+             [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.15" ] && \
+             grep -qF 'vm_flags_clear(new_vma, VM_PAD_MASK);' ./mm/mmap.c && \
+             ! grep -qF 'static inline void vm_flags_clear(' ./include/linux/mm.h; then
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("include/linux/mm.h")
+          text = path.read_text()
+          helper = """\
+          static inline void vm_flags_clear(struct vm_area_struct *vma,
+                                            vm_flags_t flags)
+          {
+              vma->vm_flags &= ~flags;
+          }
+
+          """
+
+          if "static inline void vm_flags_clear(" not in text:
+              marker = "/*\n * Use only if VMA is not part of the VMA tree"
+              if marker in text:
+                  text = text.replace(marker, helper + marker, 1)
+              elif "#endif /* _LINUX_MM_H */" in text:
+                  text = text.replace("#endif /* _LINUX_MM_H */", helper + "#endif /* _LINUX_MM_H */", 1)
+              else:
+                  raise SystemExit("include/linux/mm.h missing insertion anchor for vm_flags_clear()")
+              path.write_text(text)
+          PY
+            echo "已为 android13-5.15 补充 vm_flags_clear helper"
+          else
+            echo "无需补充 vm_flags_clear helper"
+          fi
          
          
          

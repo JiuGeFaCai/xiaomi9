@@ -208,7 +208,7 @@ jobs:
          # 使用正确变量名 KSU_VERSION_API 替换函数体
          # sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Kbuild
          if [ "$KSU_VARIANT" = "SukiSU" ]; then
-           KSU_VERSION=$(expr $(git rev-list --count HEAD 2>/dev/null || echo 13000) + 37185)
+           KSU_VERSION=$(expr $(git rev-list --count main) + 37185 2>/dev/null || echo 114514)
          else
            KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
          fi

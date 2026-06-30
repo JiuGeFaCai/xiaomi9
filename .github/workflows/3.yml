@@ -186,7 +186,11 @@ jobs:
          TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
          # 使用正确变量名 KSU_VERSION_API 替换函数体
          sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Kbuild
-         KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
+         if [ "$KSU_VARIANT" = "SukiSU" ]; then
+           KSU_VERSION=$(expr $(git rev-list --count HEAD 2>/dev/null || echo 13000) + 37185)
+         else
+           KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
+         fi
          echo "KSUVER=${KSU_VERSION}_${{ matrix.FEIL }}" >> $GITHUB_ENV
          echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
@@ -480,11 +484,11 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: ReSuKiSu_${{ env.KSUVER }}
+         name: ${{ env.KSUVARIANT }}_${{ env.KSUVER }}
          path: ./AnyKernel3/*
          
       - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
-         name: Image_ReSuKiSu_${{ env.KSUVER }}
+         name: Image_${{ env.KSUVARIANT }}_${{ env.KSUVER }}
          path: kernel_workspace/kernel_platform/dist/Image

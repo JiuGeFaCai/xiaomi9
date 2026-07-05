@@ -259,12 +259,6 @@ jobs:
 
            echo "完成"
 
-      - name: Fix SukiSU SUSFS compatibility
-        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
-        run: |
-         set -euo pipefail
-         python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform"
-
       - name: Apply lz4kd Patches
         run: |
           if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then

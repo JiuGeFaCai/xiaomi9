@@ -335,6 +335,14 @@ jobs:
             fi
            fi
 
+           if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.6" ]; then
+             if grep -q '^[[:space:]]*show_pad:[[:space:]]*$' ./fs/proc/task_mmu.c && \
+                ! grep -q 'goto[[:space:]]\+show_pad[[:space:]]*;' ./fs/proc/task_mmu.c; then
+               sed -i '/^[[:space:]]*show_pad:[[:space:]]*$/d' ./fs/proc/task_mmu.c
+               echo "已移除 task_mmu.c 中无引用的 show_pad 标签，避免 -Wunused-label"
+             fi
+           fi
+
            if [ "$memory_fake_patched" = 1 ]; then
               sed -i '/#ifdef CONFIG_KSU_SUSFS_SUS_MAP/i #include <linux/swap_slots.h>' ./mm/memory.c
               echo "已还原 swap_slots.h"

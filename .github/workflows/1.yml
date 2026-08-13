@@ -16,12 +16,12 @@ on:
         default: '6.1'
       KERNEL_NAME:
         type: string
-        description: "自定义内核后缀 (留空则使用随机字符串)"
+        description: "自定义内核后缀 (留空使用随机伪官方后缀，输入-1关闭)"
         required: false
         default: ""
       BUILD_TIME:
         type: string
-        description: "自定义构建时间 (输入F使用当前时间)"
+        description: "自定义构建时间 (输入F使用当前UTC时间，输入-1关闭)"
         required: false
         default: "Sun Jun 15 14:56:02 UTC 2025"
       sukisu_tag:
@@ -532,6 +532,7 @@ jobs:
       
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
       - name: Custom BUILD_TIME
+        if: ${{ github.event.inputs.BUILD_TIME != '-1' }}
         shell: bash
         run: |
           INPUT_TIME="${{ github.event.inputs.BUILD_TIME }}"
@@ -716,15 +717,75 @@ jobs:
           fi
           git add -A && git commit -a -m "BUILD Kernel"
 
-      - name: Add make name
-        if: ${{ github.event.inputs.KERNEL_NAME != '' }}
+      # 自定义内核后缀（GKI 结构：kernel_workspace/common）
+      - name: Custom Kernel Suffix if set
+        if: ${{ github.event.inputs.KERNEL_NAME != '' && github.event.inputs.KERNEL_NAME != '-1' }}
+        shell: bash
+        env:
+          SUFFIX: ${{ github.event.inputs.KERNEL_NAME }}
+          ANDROID_VERSION_INPUT: ${{ github.event.inputs.ANDROID_VERSION }}
         run: |
-         cd kernel_workspace
-         if [ "${{ github.event.inputs.KERNEL_VERSION }}" != "6.6" ]; then
-         sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
-         else
-         sed -i '$s|${file_localversion}|${{ github.event.inputs.KERNEL_NAME }}|' ./common/scripts/setlocalversion
-         fi
+          cd kernel_workspace
+          KANDROID_VERSION="${KANDROID_VERSION:-$ANDROID_VERSION_INPUT}"
+
+          for f in ./common/scripts/setlocalversion ./external/dtc/scripts/setlocalversion; do
+            [ -f "$f" ] || continue
+            echo "Modifying: $f"
+
+            # 移除 -dirty
+            sed -i 's/ -dirty//g' "$f"
+            sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
+
+            if grep -q 'KERNELVERSION.*scm_version' "$f"; then
+              echo "Detected NEW setlocalversion format"
+              sed -i "s|echo \"\${KERNELVERSION}.*scm_version}\"|echo \"\${KERNELVERSION}-${KANDROID_VERSION}-${SUFFIX}\"|" "$f"
+            elif grep -q 'echo "\$res"' "$f"; then
+              echo "Detected OLD setlocalversion format"
+              sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${SUFFIX}\"/" "$f"
+            else
+              echo "Unknown format, appending echo manually"
+              echo "echo \"\$res-${SUFFIX}\"" >> "$f"
+            fi
+            chmod +x "$f"
+          done
+          echo "内核后缀: -${KANDROID_VERSION}-${SUFFIX}"
+
+      # 伪官方格式的随机后缀（仅在 KERNEL_NAME 留空时生效）
+      - name: Custom Kernel Random Suffix if empty
+        if: ${{ github.event.inputs.KERNEL_NAME == '' }}
+        shell: bash
+        env:
+          ANDROID_VERSION_INPUT: ${{ github.event.inputs.ANDROID_VERSION }}
+        run: |
+          cd kernel_workspace
+          KANDROID_VERSION="${KANDROID_VERSION:-$ANDROID_VERSION_INPUT}"
+
+          # 生成随机数字和随机 hash
+          RANDOM_DIGIT=$(od -An -N1 -tu1 < /dev/urandom | tr -d '[:space:]' | awk '{print $1 % 11}')
+          RANDOM_HASH=$(od -An -N7 -tx1 /dev/urandom | tr -d ' \n')
+          RANDOM_SUFFIX="${RANDOM_DIGIT}-o-g${RANDOM_HASH}"
+
+          for f in ./common/scripts/setlocalversion ./external/dtc/scripts/setlocalversion; do
+            [ -f "$f" ] || continue
+            echo "Modifying: $f"
+
+            # 移除 -dirty
+            sed -i 's/ -dirty//g' "$f"
+            sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
+
+            if grep -q 'KERNELVERSION.*scm_version' "$f"; then
+              echo "Detected NEW setlocalversion format"
+              sed -i "s|echo \"\${KERNELVERSION}.*scm_version}\"|echo \"\${KERNELVERSION}-${KANDROID_VERSION}-${RANDOM_SUFFIX}\"|" "$f"
+            elif grep -q 'echo "\$res"' "$f"; then
+              echo "Detected OLD setlocalversion format"
+              sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${RANDOM_SUFFIX}\"/" "$f"
+            else
+              echo "Unknown format, appending echo manually"
+              echo "echo \"\$res-${RANDOM_SUFFIX}\"" >> "$f"
+            fi
+            chmod +x "$f"
+          done
+          echo "内核后缀(随机): -${KANDROID_VERSION}-${RANDOM_SUFFIX}"
 
       - name: 修复 glibc 2.38 兼容性
         working-directory: kernel_workspace/common

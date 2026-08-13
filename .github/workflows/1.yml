@@ -728,7 +728,17 @@ jobs:
           cd kernel_workspace
           KANDROID_VERSION="${KANDROID_VERSION:-$ANDROID_VERSION_INPUT}"
 
-          for f in ./common/scripts/setlocalversion ./external/dtc/scripts/setlocalversion; do
+          # 归一化：后缀自带前导 - 或自带 androidXX 段时视为完整 localversion，避免重复拼接
+          case "$SUFFIX" in
+            -*)                                        LOCALVER="$SUFFIX" ;;
+            "$KANDROID_VERSION"|"$KANDROID_VERSION"-*) LOCALVER="-$SUFFIX" ;;
+            *)                                         LOCALVER="-${KANDROID_VERSION}-${SUFFIX}" ;;
+          esac
+          # 转义 sed 替换串中的特殊字符（\ & |）
+          LOCALVER_ESC=$(printf '%s' "$LOCALVER" | sed -e 's/[\\&|]/\\&/g')
+
+          # 只改 common：决定 KERNELRELEASE 的只有这一个，external/dtc 只影响 dtc 工具版本
+          for f in ./common/scripts/setlocalversion; do
             [ -f "$f" ] || continue
             echo "Modifying: $f"
 
@@ -738,17 +748,17 @@ jobs:
 
             if grep -q 'KERNELVERSION.*scm_version' "$f"; then
               echo "Detected NEW setlocalversion format"
-              sed -i "s|echo \"\${KERNELVERSION}.*scm_version}\"|echo \"\${KERNELVERSION}-${KANDROID_VERSION}-${SUFFIX}\"|" "$f"
+              sed -i "s|echo \"\${KERNELVERSION}.*scm_version}\"|echo \"\${KERNELVERSION}${LOCALVER_ESC}\"|" "$f"
             elif grep -q 'echo "\$res"' "$f"; then
               echo "Detected OLD setlocalversion format"
-              sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${SUFFIX}\"/" "$f"
+              sed -i "s|^res=.*|res=\"${LOCALVER_ESC}\"|" "$f"
             else
               echo "Unknown format, appending echo manually"
-              echo "echo \"\$res-${SUFFIX}\"" >> "$f"
+              echo "echo \"\$res${LOCALVER}\"" >> "$f"
             fi
             chmod +x "$f"
           done
-          echo "内核后缀: -${KANDROID_VERSION}-${SUFFIX}"
+          echo "内核后缀: ${LOCALVER}"
 
       # 伪官方格式的随机后缀（仅在 KERNEL_NAME 留空时生效）
       - name: Custom Kernel Random Suffix if empty
@@ -765,7 +775,7 @@ jobs:
           RANDOM_HASH=$(od -An -N7 -tx1 /dev/urandom | tr -d ' \n')
           RANDOM_SUFFIX="${RANDOM_DIGIT}-o-g${RANDOM_HASH}"
 
-          for f in ./common/scripts/setlocalversion ./external/dtc/scripts/setlocalversion; do
+          for f in ./common/scripts/setlocalversion; do
             [ -f "$f" ] || continue
             echo "Modifying: $f"
 

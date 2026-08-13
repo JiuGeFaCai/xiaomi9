@@ -546,6 +546,9 @@ jobs:
            exit 1
          fi
 
+         # 打印最终内核版本，核对后缀与构建时间是否按预期生效
+         strings "$OUTDIR/Image" | grep -m1 "Linux version" || echo "未能从 Image 提取版本串"
+
          KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
          if [ "$KPM_ENABLE" = "builtin" ]; then
            echo "正在应用内置 KPM 并修补内核: $OUTDIR/Image"

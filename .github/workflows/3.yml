@@ -84,7 +84,14 @@ jobs:
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
+      # 跨 run 恢复缓存后 hardlink 会让缓存对象与编译产物共享 inode，
+      # 后续步骤修改产物时可能污染缓存，改为复制
+      CCACHE_NOHARDLINK: "true"
+      CCACHE_COMPRESS: "true"
+      # 内核编译命中率关键：repo sync 后头文件 mtime/ctime 每次都不同，
+      # 不放宽这些字段会导致跨 run 命中率下降；time_macros 让 __DATE__/__TIME__
+      # 不参与 hash（构建时间已由 KBUILD_BUILD_TIMESTAMP 固定）
+      CCACHE_SLOPPINESS: "file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,time_macros"
       TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
     steps:
       - name: Maximize build space
@@ -115,28 +122,36 @@ jobs:
 
       - name: Restore ccache
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v5
+        id: ccache-restore
         with:
           path: /home/runner/.ccache
-          key: ${{ runner.os }}-${{ github.repository }}-${{ matrix.FEIL }}
+          # key 带 run_id 保证每次 run 都写入新条目（滚动更新），
+          # 靠 restore-keys 前缀回退到上一次同机型的缓存
+          key: ccache-${{ runner.os }}-${{ matrix.FEIL }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-${{ github.repository }}-${{ matrix.FEIL }}-
-            ${{ runner.os }}-
-            ccache-
-            
-       # 4. 设置 ccache 环境变量  
+            ccache-${{ runner.os }}-${{ matrix.FEIL }}-
+
+       # 4. 设置 ccache 环境变量
       - name: Setup ccache environment
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
-        run: |  
-         echo "CCACHE_DIR=/home/runner/.ccache" >> $GITHUB_ENV  
-         echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV  
-         echo "CCACHE_COMPILERCHECK=%compiler% -dumpmachine; %compiler% -dumpversion" >> $GITHUB_ENV  
-         echo "CCACHE_NOHASHDIR=true" >> $GITHUB_ENV  
-         echo "CCACHE_HARDLINK=true" >> $GITHUB_ENV  
-         echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV  
-         echo "CCACHE_LOGFILE=${{ github.workspace }}/ccache.log" >> $GITHUB_ENV  
-         echo "/usr/lib/ccache" >> $GITHUB_PATH  
-         
+        run: |
+         echo "CCACHE_DIR=/home/runner/.ccache" >> $GITHUB_ENV
+         # 仓库缓存总配额 10GB，matrix 有 10 个机型并行，
+         # 单 job 超过 1G 会导致条目互相 LRU 驱逐、命中率反而下降
+         echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
+         echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
+         echo "CCACHE_LOGFILE=${{ github.workspace }}/ccache.log" >> $GITHUB_ENV
+         echo "/usr/lib/ccache" >> $GITHUB_PATH
+         mkdir -p /home/runner/.ccache
+         export CCACHE_DIR=/home/runner/.ccache
+         # 缓存配置失败不应阻塞构建，仅告警（环境变量仍然生效）
+         ccache -M 1G || echo "警告: ccache -M 失败"
+         ccache -o compression=true || echo "警告: 开启压缩失败"
+         ccache -o sloppiness="$CCACHE_SLOPPINESS" || echo "警告: sloppiness 设置失败，将仅依赖环境变量"
+         echo "缓存恢复结果: cache-hit=${{ steps.ccache-restore.outputs.cache-hit }}"
+         echo "命中的 key: ${{ steps.ccache-restore.outputs.cache-matched-key }}"
+
       - name: Show ccache stats
         run: |
          ccache -s || true
@@ -412,7 +427,10 @@ jobs:
           fi
 
           export PATH="/usr/lib/ccache:$PATH"
-          
+
+          # 清零统计，使编译后的 ccache -s 反映本次命中率而非历史累计值
+          ccache -z || true
+
           # 设置 AFDO 配置文件路径
           export AFDO_PROFILE="${{ github.workspace }}/kernel_workspace/kernel_platform/afdo/kernel.afdo"
           if [ ! -f "$AFDO_PROFILE" ]; then
@@ -422,14 +440,25 @@ jobs:
 
           cd kernel_workspace/kernel_platform/common
           clang -v
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC='ccache clang' RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld  HOSTLD=ld.lld O=out KCFLAGS+="-Wno-error -fauto-profile=$AFDO_PROFILE" gki_defconfig all
+          # 只编 Image：后续 AnyKernel3 打包与上传仅取 dist/Image，不涉及 .ko，
+          # 编 all 会额外编出一整套用不到的模块
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC='ccache clang' RUSTC=../../prebuilts/rust/linux-x86/1.73.0b/bin/rustc PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld  HOSTLD=ld.lld O=out KCFLAGS+="-Wno-error -fauto-profile=$AFDO_PROFILE" gki_defconfig Image
           # 创建输出目录并复制 Image
           mkdir -p ../dist
           cp out/arch/arm64/boot/Image ../dist/
 
-      # 6. 打印 ccache 使用统计
+      # 6. 打印 ccache 使用统计（本次命中率）
       - name: Show ccache stats
-        run: ccache -s || true
+        run: ccache -sv || ccache -s || true
+
+      # 7. 保存本次编译产生的 ccache（滚动写入新 key）
+      #    编译失败也保存，便于下次接着复用已编译对象
+      - name: Save ccache
+        if: ${{ always() && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        uses: actions/cache/save@v5
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.FEIL }}-${{ github.run_id }}
          
       - name: Apply KPM Patch
         run: |

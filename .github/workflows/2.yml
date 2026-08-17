@@ -349,6 +349,43 @@ jobs:
             fi
            fi
 
+           # 修复 VMA_PAD_START 隐式声明（-Werror,-Wimplicit-function-declaration）
+           # SUSFS 补丁引入的 task_mmu.c 代码会调用 VMA_PAD_START，但该宏定义在
+           # include/linux/pgsize_migration_inline.h 中，部分内核树缺失或未被 include
+           if grep -qE 'VMA_PAD_START[[:space:]]*\(' ./fs/proc/task_mmu.c; then
+             PGM_INC=""
+             if [ -f ./include/linux/pgsize_migration_inline.h ] && \
+                grep -qE '^[[:space:]]*#[[:space:]]*define[[:space:]]+VMA_PAD_START' ./include/linux/pgsize_migration_inline.h; then
+               if [ -f ./include/linux/pgsize_migration.h ]; then
+                 PGM_INC="linux/pgsize_migration.h"
+               else
+                 PGM_INC="linux/pgsize_migration_inline.h"
+               fi
+             elif [ -f ./include/linux/pgsize_migration.h ] && \
+                  grep -qE '^[[:space:]]*#[[:space:]]*define[[:space:]]+VMA_PAD_START' ./include/linux/pgsize_migration.h; then
+               PGM_INC="linux/pgsize_migration.h"
+             fi
+             # 内核树自带真实定义时优先补 include
+             if [ -n "$PGM_INC" ] && ! grep -qF "#include <$PGM_INC>" ./fs/proc/task_mmu.c; then
+               if grep -q '^#include "internal.h"' ./fs/proc/task_mmu.c; then
+                 sed -i "/^#include \"internal.h\"/i #include <$PGM_INC>" ./fs/proc/task_mmu.c
+               else
+                 sed -i "0,/^#include /s|^#include |#include <$PGM_INC>\n#include |" ./fs/proc/task_mmu.c
+               fi
+               echo "已为 task_mmu.c 补充 #include <$PGM_INC>"
+             fi
+             # 兜底定义，放在所有 include 之后；有真实定义时被 #ifndef 跳过
+             # 4K 页配置下 vma_pad_pages() 恒为 0，与上游语义等价
+             if ! grep -qE '^[[:space:]]*#[[:space:]]*define[[:space:]]+VMA_PAD_START' ./fs/proc/task_mmu.c; then
+               if grep -q '^#include "internal.h"' ./fs/proc/task_mmu.c; then
+                 sed -i '/^#include "internal.h"/a \\n#ifndef VMA_PAD_START\n#define VMA_PAD_START(vma) ((vma)->vm_end)\n#endif' ./fs/proc/task_mmu.c
+                 echo "已为 task_mmu.c 注入 VMA_PAD_START 兜底定义"
+               elif [ -z "$PGM_INC" ]; then
+                 echo "警告: task_mmu.c 使用 VMA_PAD_START 但无法定位 internal.h 锚点，跳过兜底注入"
+               fi
+             fi
+           fi
+
       # - name: Fix SukiSU SUSFS compatibility
       #   if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
       #   run: |

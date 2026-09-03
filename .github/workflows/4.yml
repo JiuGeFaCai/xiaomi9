@@ -285,7 +285,7 @@ jobs:
       - name: Set up susfs
         run: |
            cd kernel_workspace
-           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android16-6.12
+           git clone https://github.com/cctv18/susfs4oki.git -b gki-android16-6.12
            if [ "${{ github.event.inputs.RE_KERNEL }}" = "true" ]; then
             git clone https://github.com/Sakion-Team/Re-Kernel.git
            fi

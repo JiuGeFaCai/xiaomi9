@@ -915,7 +915,7 @@ jobs:
          cd "$GITHUB_WORKSPACE"
          mkdir -p output
          cp "$OUTDIR/Image" ./output/
-         git clone https://github.com/WildPlusKernel/AnyKernel3.git --depth=1
+         git clone https://github.com/JiuGeFaCai/AnyKernel3.git --depth=1
          rm -rf ./AnyKernel3/.git
          cp ./output/Image ./AnyKernel3/
          if [ "$KPM_ENABLE" = "kpn" ]; then

@@ -920,7 +920,7 @@ jobs:
          cp ./output/Image ./AnyKernel3/
          if [ "$KPM_ENABLE" = "kpn" ]; then
            cd ./AnyKernel3
-           wget "https://github.com/cctv18/KPatch-Next/releases/latest/download/kpn.zip"
+           wget https://github.com/cctv18/KPatch-Next/releases/latest/download/kpn.zip
          fi
 
       - name: Upload AnyKernel3

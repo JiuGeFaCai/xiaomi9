@@ -7,39 +7,10 @@ on:
         required: true
         default: 'android16-6.12-2025-06'
       enable_oneplus_common:
-       description: "是否切换一加内核源码"
-       required: false
-       default: false
-       type: boolean
-      RE_KERNEL:
-        type: boolean
-        description: "是否添加Re-Kernel？"
-        required: true
+        description: "是否切换一加内核源码"
+        required: false
         default: false
-      enable_oneplus_patch:
-       description: "是否启用一加补丁"
-       required: false
-       default: true
-       type: boolean
-      enable_Unicode_bypass_Fix:
-       description: "零宽字符漏洞的修复补丁"
-       required: false
-       default: false
-       type: boolean
-      KERNEL_NAME:
-        type: string
-        description: "自定义内核后缀 (留空使用随机伪官方后缀，输入-1关闭)"
-        required: false
-        default: ""
-      BUILD_TIME:
-        type: string
-        description: "自定义构建时间 (输入F使用当前UTC时间，输入-1关闭)"
-        required: false
-        default: "Sun Jun 15 14:56:02 UTC 2025"
-      sukisu_tag:
-        description: "自定义版本来源后缀"
-        required: false
-        default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
+        type: boolean
       ksu_variant:
         description: "KernelSU 变体"
         type: choice
@@ -64,6 +35,35 @@ on:
           - 'false'
           - 'builtin'
           - 'kpn'
+      KERNEL_NAME:
+        type: string
+        description: "自定义内核后缀 (留空使用随机伪官方后缀，输入-1关闭)"
+        required: false
+        default: ""
+      BUILD_TIME:
+        type: string
+        description: "自定义构建时间 (输入F使用当前UTC时间，输入-1关闭)"
+        required: false
+        default: "Sun Jun 15 14:56:02 UTC 2025"
+      RE_KERNEL:
+        type: boolean
+        description: "是否添加Re-Kernel？"
+        required: true
+        default: false
+      enable_oneplus_patch:
+        description: "是否启用一加补丁"
+        required: false
+        default: true
+        type: boolean
+      enable_Unicode_bypass_Fix:
+        description: "零宽字符漏洞的修复补丁"
+        required: false
+        default: false
+        type: boolean
+      sukisu_tag:
+        description: "自定义版本来源后缀"
+        required: false
+        default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
       sus_enable:
         type: boolean
         description: "是否切换sus提交"

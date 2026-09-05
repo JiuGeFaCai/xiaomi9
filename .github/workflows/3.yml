@@ -2,6 +2,14 @@ name: OnePlus SM8750 Build SuKiSu SUSFS
 on:
   workflow_dispatch:
     inputs:
+      BUILD_RUN:
+        type: choice
+        description: "RUN"
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - self-hosted
       ksu_variant:
         description: "KernelSU 变体"
         type: choice
@@ -35,34 +43,30 @@ on:
         description: "自定义构建时间 (输入F使用当前时间)"
         required: false
         default: "Sun Jun 15 14:56:02 UTC 2025"
-      BUILD_RUN:
-        type: choice
-        description: "RUN"
-        required: true
-        default: ubuntu-latest
-        options:
-          - ubuntu-latest
-          - self-hosted
-      enable_sched_ext:
-       description: "是否添加风驰驱动"
-       required: false
-       default: true
-       type: boolean
-      enable_lto:
-       description: "是否启用lto编译"
-       required: false
-       default: true
-       type: boolean
       baseband_guard:
         description: '是否开启内核级基带保护(阻止一切对非用户分区的写入，有效防止格机)'
         required: false
         type: boolean
         default: false
+      enable_sched_ext:
+        description: "是否添加风驰驱动"
+        required: false
+        default: true
+        type: boolean
+      enable_lto:
+        description: "是否启用lto编译"
+        required: false
+        default: true
+        type: boolean
       enable_Unicode_bypass_Fix:
-       description: "零宽字符漏洞的修复补丁"
-       required: false
-       default: false
-       type: boolean
+        description: "零宽字符漏洞的修复补丁"
+        required: false
+        default: false
+        type: boolean
+      sukisu_tag:
+        description: "自定义版本来源后缀"
+        required: false
+        default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
       sus_enable:
         type: boolean
         description: "是否切换sus提交"
@@ -72,11 +76,6 @@ on:
         description: "sus分支"
         required: true
         default: "123456789"
-      sukisu_tag:
-        description: "自定义版本来源后缀"
-        required: false
-        default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
-        
 
 jobs:
   build:

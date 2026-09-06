@@ -100,15 +100,23 @@ jobs:
       CCACHE_HARDLINK: "true"
       TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          temp-reserve-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
+      - name: Ensure 4 GiB swap
+        shell: bash
+        run: |
+          set -euo pipefail
+          SWAP_TARGET_MB=4096
+          SWAP_CURRENT_MB=$(awk '/^SwapTotal:/ {print int($2 / 1024)}' /proc/meminfo)
+          if [ "$SWAP_CURRENT_MB" -lt "$SWAP_TARGET_MB" ]; then
+            SWAP_EXTRA_MB=$((SWAP_TARGET_MB - SWAP_CURRENT_MB))
+            SWAP_FILE=/swapfile-kernel-build
+            sudo install -m 600 /dev/null "$SWAP_FILE"
+            sudo fallocate -l "${SWAP_EXTRA_MB}M" "$SWAP_FILE"
+            sudo mkswap "$SWAP_FILE"
+            sudo swapon "$SWAP_FILE"
+          fi
+          free -h
+          swapon --show
+          df -h / "$GITHUB_WORKSPACE"
 
       - name: Checkout repository
         uses: actions/checkout@v4

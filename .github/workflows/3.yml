@@ -129,7 +129,7 @@ jobs:
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         run: |
          sudo apt update
-         sudo apt install -y python3 ccache libelf-dev
+         sudo apt install -y python3 ccache libelf-dev dos2unix
 
       - name: Restore ccache
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}

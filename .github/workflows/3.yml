@@ -397,7 +397,10 @@ jobs:
         run: |
           set -euo pipefail
           STATE_FILE="$RUNNER_TEMP/ccache-state"
+          GIT_META_FILE="$RUNNER_TEMP/ccache-git-meta"
+          UNTRACKED_FILE="$RUNNER_TEMP/ccache-untracked"
           WORKSPACE="$GITHUB_WORKSPACE/kernel_workspace"
+          trap 'rm -f "$STATE_FILE" "$GIT_META_FILE" "$UNTRACKED_FILE"' EXIT
           : > "$STATE_FILE"
           printf '%s\0' \
             "device=$MATRIX_DEVICE" "ksu_variant=$KSU_VARIANT" \
@@ -407,11 +410,13 @@ jobs:
             "unicode_fix=$ENABLE_UNICODE_FIX" "sukisu_tag=$SUKISU_TAG" \
             'recipe=LLVM=1 ARCH=arm64 CC=ccache-clang KCFLAGS=-Wno-error targets=gki_defconfig,Image' \
             >> "$STATE_FILE"
+          find "$WORKSPACE" -path "$WORKSPACE/.repo" -prune -o -path '*/out' -prune -o -name .git -print0 -prune | sort -z > "$GIT_META_FILE"
           while IFS= read -r -d '' git_meta; do
             repo_dir="${git_meta%/.git}"
             repo_rel="${repo_dir#"$WORKSPACE"/}"
             printf 'repo=%s\0tree=%s\0' "$repo_rel" "$(git -C "$repo_dir" rev-parse 'HEAD^{tree}')" >> "$STATE_FILE"
             git -C "$repo_dir" diff --no-ext-diff --binary HEAD | sha256sum >> "$STATE_FILE"
+            git -C "$repo_dir" ls-files --others --exclude-standard -z | sort -z > "$UNTRACKED_FILE"
             while IFS= read -r -d '' file; do
               path="$repo_dir/$file"
               if [[ -L "$path" ]]; then
@@ -421,9 +426,14 @@ jobs:
                 printf 'untracked-file=%s/%s\0' "$repo_rel" "$file" >> "$STATE_FILE"
                 sha256sum < "$path" >> "$STATE_FILE"
               fi
-            done < <(git -C "$repo_dir" ls-files --others --exclude-standard -z | sort -z)
-          done < <(find "$WORKSPACE" -path "$WORKSPACE/.repo" -prune -o -path '*/out' -prune -o -name .git -print0 -prune | sort -z)
-          CLANG="$WORKSPACE/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin/clang"
+            done < "$UNTRACKED_FILE"
+          done < "$GIT_META_FILE"
+          if [[ "$MATRIX_DEVICE" == "oneplus_sm8750" ]]; then
+            CLANG_DIR=zyc-clang
+          else
+            CLANG_DIR=clang-r510928
+          fi
+          CLANG="$WORKSPACE/kernel_platform/prebuilts/clang/host/linux-x86/$CLANG_DIR/bin/clang"
           "$CLANG" --version >> "$STATE_FILE"
           ccache --version | head -n 1 >> "$STATE_FILE"
           printf 'workflow-recipe=' >> "$STATE_FILE"
@@ -431,7 +441,6 @@ jobs:
           FINGERPRINT="$(sha256sum "$STATE_FILE" | cut -d' ' -f1)"
           echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
           echo "ccache 输入指纹: $FINGERPRINT"
-          rm -f "$STATE_FILE"
 
       - name: Restore ccache
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}

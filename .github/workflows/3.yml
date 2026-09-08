@@ -135,10 +135,8 @@ jobs:
         id: ccache-restore
         with:
           path: /home/runner/.ccache
-          # v2 隔离历史可疑缓存，只恢复同机型成功构建保存的新缓存。
-          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}-${{ github.run_id }}
-          restore-keys: |
-            ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}-
+          # 单条模式：固定 key，每个机型只保留一条缓存
+          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}
 
        # 4. 设置 ccache 环境变量
       - name: Setup ccache environment
@@ -469,14 +467,14 @@ jobs:
         if: ${{ always() }}
         run: ccache -sv || ccache -s || true
 
-      # 7. 保存本次编译产生的 ccache（滚动写入新 key）
-      #    仅编译成功后保存，失败或取消的构建不继续传播可疑缓存。
+      # 7. 保存本次编译产生的 ccache（单条模式：缓存条目不可变，
+      #    仅在本次未命中时保存；命中后不再刷新，避免每次新堆一条缓存）
       - name: Save ccache
-        if: ${{ success() && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ success() && steps.ccache-restore.outputs.cache-hit != 'true' && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         uses: actions/cache/save@v5
         with:
           path: /home/runner/.ccache
-          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}-${{ github.run_id }}
+          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}
 
       - name: Upload ccache failure log
         if: ${{ failure() }}

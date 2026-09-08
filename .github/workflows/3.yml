@@ -129,41 +129,6 @@ jobs:
          sudo apt update
          sudo apt install -y python3 ccache libelf-dev dos2unix
 
-      - name: Restore ccache
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
-        uses: actions/cache/restore@v5
-        id: ccache-restore
-        with:
-          path: /home/runner/.ccache
-          # v2 隔离历史可疑缓存，只恢复同机型成功构建保存的新缓存。
-          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}-${{ github.run_id }}
-          restore-keys: |
-            ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}-
-
-       # 4. 设置 ccache 环境变量
-      - name: Setup ccache environment
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
-        run: |
-         echo "CCACHE_DIR=/home/runner/.ccache" >> $GITHUB_ENV
-         # 仓库缓存总配额 10GB，matrix 有 10 个机型并行，
-         # 单 job 超过 1G 会导致条目互相 LRU 驱逐、命中率反而下降
-         echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
-         echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
-         echo "CCACHE_LOGFILE=${{ github.workspace }}/ccache.log" >> $GITHUB_ENV
-         echo "/usr/lib/ccache" >> $GITHUB_PATH
-         mkdir -p /home/runner/.ccache
-         export CCACHE_DIR=/home/runner/.ccache
-         # 缓存配置失败不应阻塞构建，仅告警（环境变量仍然生效）
-         ccache -M 1G || echo "警告: ccache -M 失败"
-         ccache -o compression=true || echo "警告: 开启压缩失败"
-         ccache -o sloppiness="$CCACHE_SLOPPINESS" || echo "警告: sloppiness 设置失败，将仅依赖环境变量"
-         echo "缓存恢复结果: cache-hit=${{ steps.ccache-restore.outputs.cache-hit }}"
-         echo "命中的 key: ${{ steps.ccache-restore.outputs.cache-matched-key }}"
-
-      - name: Show ccache stats
-        run: |
-         ccache -s || true
-
       - name: Install repo tool
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         run: |
@@ -414,6 +379,90 @@ jobs:
          echo "CONFIG_LTO_CLANG=y" >> ./common/arch/arm64/configs/gki_defconfig
          echo "CONFIG_LTO_CLANG_THIN=y" >> ./common/arch/arm64/configs/gki_defconfig
 
+      - name: Compute ccache fingerprint
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        id: ccache-key
+        shell: bash
+        env:
+          MATRIX_DEVICE: ${{ matrix.FEIL }}
+          KSU_VARIANT: ${{ github.event.inputs.ksu_variant }}
+          KSU_VERSION: ${{ env.KSUVER }}
+          KPM_ENABLE: ${{ github.event.inputs.kpm_enable }}
+          KERNEL_NAME_INPUT: ${{ github.event.inputs.KERNEL_NAME }}
+          BASEBAND_GUARD: ${{ github.event.inputs.baseband_guard }}
+          ENABLE_SCHED_EXT: ${{ github.event.inputs.enable_sched_ext }}
+          ENABLE_LTO: ${{ github.event.inputs.enable_lto }}
+          ENABLE_UNICODE_FIX: ${{ github.event.inputs.enable_Unicode_bypass_Fix }}
+          SUKISU_TAG: ${{ github.event.inputs.sukisu_tag }}
+        run: |
+          set -euo pipefail
+          STATE_FILE="$RUNNER_TEMP/ccache-state"
+          WORKSPACE="$GITHUB_WORKSPACE/kernel_workspace"
+          : > "$STATE_FILE"
+          printf '%s\0' \
+            "device=$MATRIX_DEVICE" "ksu_variant=$KSU_VARIANT" \
+            "ksu_version=$KSU_VERSION" "kpm=$KPM_ENABLE" \
+            "kernel_name=$KERNEL_NAME_INPUT" "baseband_guard=$BASEBAND_GUARD" \
+            "sched_ext=$ENABLE_SCHED_EXT" "lto=$ENABLE_LTO" \
+            "unicode_fix=$ENABLE_UNICODE_FIX" "sukisu_tag=$SUKISU_TAG" \
+            'recipe=LLVM=1 ARCH=arm64 CC=ccache-clang KCFLAGS=-Wno-error targets=gki_defconfig,Image' \
+            >> "$STATE_FILE"
+          while IFS= read -r -d '' git_meta; do
+            repo_dir="${git_meta%/.git}"
+            repo_rel="${repo_dir#"$WORKSPACE"/}"
+            printf 'repo=%s\0tree=%s\0' "$repo_rel" "$(git -C "$repo_dir" rev-parse 'HEAD^{tree}')" >> "$STATE_FILE"
+            git -C "$repo_dir" diff --no-ext-diff --binary HEAD | sha256sum >> "$STATE_FILE"
+            while IFS= read -r -d '' file; do
+              path="$repo_dir/$file"
+              if [[ -L "$path" ]]; then
+                printf 'untracked-symlink=%s/%s\0' "$repo_rel" "$file" >> "$STATE_FILE"
+                readlink "$path" | sha256sum >> "$STATE_FILE"
+              elif [[ -f "$path" ]]; then
+                printf 'untracked-file=%s/%s\0' "$repo_rel" "$file" >> "$STATE_FILE"
+                sha256sum < "$path" >> "$STATE_FILE"
+              fi
+            done < <(git -C "$repo_dir" ls-files --others --exclude-standard -z | sort -z)
+          done < <(find "$WORKSPACE" -path "$WORKSPACE/.repo" -prune -o -path '*/out' -prune -o -name .git -print0 -prune | sort -z)
+          CLANG="$WORKSPACE/kernel_platform/prebuilts/clang/host/linux-x86/clang-r510928/bin/clang"
+          "$CLANG" --version >> "$STATE_FILE"
+          ccache --version | head -n 1 >> "$STATE_FILE"
+          printf 'workflow-recipe=' >> "$STATE_FILE"
+          sha256sum "$GITHUB_WORKSPACE/.github/workflows/3.yml" >> "$STATE_FILE"
+          FINGERPRINT="$(sha256sum "$STATE_FILE" | cut -d' ' -f1)"
+          echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+          echo "ccache 输入指纹: $FINGERPRINT"
+          rm -f "$STATE_FILE"
+
+      - name: Restore ccache
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        uses: actions/cache/restore@v5
+        id: ccache-restore
+        with:
+          path: /home/runner/.ccache
+          key: ccache-v3-${{ runner.os }}-${{ matrix.FEIL }}-${{ steps.ccache-key.outputs.fingerprint }}
+          restore-keys: |
+            ccache-v3-${{ runner.os }}-${{ matrix.FEIL }}-
+
+      - name: Setup ccache environment
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        run: |
+          echo "CCACHE_DIR=/home/runner/.ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=1G" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=${{ github.workspace }}" >> "$GITHUB_ENV"
+          echo "CCACHE_LOGFILE=${{ github.workspace }}/ccache.log" >> "$GITHUB_ENV"
+          echo "/usr/lib/ccache" >> "$GITHUB_PATH"
+          mkdir -p /home/runner/.ccache
+          export CCACHE_DIR=/home/runner/.ccache
+          ccache -M 1G || echo "警告: ccache -M 失败"
+          ccache -o compression=true || echo "警告: 开启压缩失败"
+          ccache -o sloppiness="$CCACHE_SLOPPINESS" || echo "警告: sloppiness 设置失败，将仅依赖环境变量"
+          echo "是否精确命中: ${{ steps.ccache-restore.outputs.cache-hit }}"
+          echo "恢复的 key: ${{ steps.ccache-restore.outputs.cache-matched-key }}"
+
+      - name: Show restored ccache stats
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        run: ccache -s || true
+
       # Custom kernel build time, without adding #1 SMP PREEMPT 自定义内核构建时间，不要加入#1 SMP PREEMPT
       - name: Custom BUILD_TIME
         shell: bash
@@ -466,17 +515,19 @@ jobs:
 
       # 6. 打印 ccache 使用统计（本次命中率）
       - name: Show ccache stats
-        if: ${{ always() }}
+        if: ${{ always() && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         run: ccache -sv || ccache -s || true
 
-      # 7. 保存本次编译产生的 ccache（滚动写入新 key）
-      #    仅编译成功后保存，失败或取消的构建不继续传播可疑缓存。
+      # 7. 仅当编译输入指纹没有精确命中时保存新缓存；输入不变时不重复上传。
       - name: Save ccache
-        if: ${{ success() && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: >-
+          success() &&
+          github.event.inputs.BUILD_RUN == 'ubuntu-latest' &&
+          steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: /home/runner/.ccache
-          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}-${{ github.run_id }}
+          key: ccache-v3-${{ runner.os }}-${{ matrix.FEIL }}-${{ steps.ccache-key.outputs.fingerprint }}
 
       - name: Upload ccache failure log
         if: ${{ failure() }}

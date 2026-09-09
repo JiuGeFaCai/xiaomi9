@@ -314,16 +314,25 @@ jobs:
            cd ./common
            patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch || true
 
+           # patch 后面挂了 || true，被拒的 hunk 不会让这一步失败，
+           # 只会在后面编译时才炸（比如 exec.c 少了 susfs_def.h），所以先把 .rej 打出来
+           if find . -name '*.rej' | grep -q .; then
+             echo "::warning::以下 hunk 被拒绝，需人工确认："
+             find . -name '*.rej' -print -exec cat {} \;
+           fi
+
       - name: Fix SUSFS exec.c header
         run: |
           cd kernel_workspace/common
-          if grep -q 'susfs_is_current_proc_umounted' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
-            if grep -qF '#include <linux/dma-buf.h>' ./fs/exec.c; then
-              sed -i '/#include <linux\/dma-buf.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
-            else
-              sed -i '/#include <linux\/ksm.h>/a #ifdef CONFIG_KSU_SUSFS\n#include <linux\/susfs_def.h>\n#endif' ./fs/exec.c
-            fi
-            echo "已修复 exec.c 缺少 susfs_def.h 问题"
+          # exec.c 用到的 susfs 符号会随版本变（旧版 *_umounted，新版 *_no_su），
+          # 所以按前缀统一判断，别写死单个函数名
+          if grep -qE 'susfs_(is|set|clear)_current_proc' ./fs/exec.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c; then
+            # uaccess.h 是 exec.c 里从 5.10 到 6.12 都稳定存在的锚点，
+            # dma-buf.h / ksm.h 不一定有，sed 找不到锚点会静默什么都不做
+            awk '/^#include <linux\/uaccess\.h>/ && !d { print "#ifdef CONFIG_KSU_SUSFS"; print "#include <linux/susfs_def.h>"; print "#endif"; d=1 } { print }' ./fs/exec.c > /tmp/exec.c
+            mv /tmp/exec.c ./fs/exec.c
+            grep -qF '#include <linux/susfs_def.h>' ./fs/exec.c || { echo "❌ exec.c 插入 susfs_def.h 失败，锚点已变"; exit 1; }
+            echo "✅ 已修复 exec.c 缺少 susfs_def.h 问题"
           else
             echo "exec.c 无需修复或已包含 susfs_def.h"
           fi

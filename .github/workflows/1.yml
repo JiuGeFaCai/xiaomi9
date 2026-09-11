@@ -425,6 +425,33 @@ jobs:
               echo "已还原 swap_slots.h"
             fi
 
+      # 修复 SUSFS 补丁在 5.10/5.15 内核上对 fs/notify/fdinfo.c 的错误改写
+      # SUSFS 的 50_add_susfs_in_gki-*.patch 里 fdinfo.c 的 hunk 是按 6.1+ 内核写的：
+      #   1) 用了 5.10/5.15 中不存在的 inotify_mark_user_mask()（该函数 6.1 才引入，
+      #      -Werror,-Wimplicit-function-declaration 直接报错）
+      #   2) 补丁自带的 orig_flow: 标签被 patch -F 3 模糊应用到了 5.10/5.15 原有的
+      #      "u32 mask = mark->mask & IN_ALL_EVENTS;" 声明之前，clang 不允许标签后紧跟声明
+      #      （报 expected expression，进而 mask 未声明）
+      # 只有打了补丁后仍残留 inotify_mark_user_mask 的 5.10/5.15 树会走到这里；6.1+ 树本身有该函数，自动跳过。
+      - name: Fix SUSFS fdinfo.c for 5.10/5.15
+        working-directory: kernel_workspace/common
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'inotify_mark_user_mask' fs/notify/fdinfo.c; then
+            echo "检测到 SUSFS 补丁向 fdinfo.c 注入了 6.1+ 的 inotify_mark_user_mask()，正在改回 5.10/5.15 写法..."
+            sed -i 's/inotify_mark_user_mask(mark)/mark->mask \& IN_ALL_EVENTS/g' fs/notify/fdinfo.c
+            echo "修正 orig_flow: 标签后紧跟声明导致的 clang expected expression..."
+            sed -i 's/^[[:space:]]*orig_flow:$/orig_flow: ;/' fs/notify/fdinfo.c
+            if grep -q 'inotify_mark_user_mask' fs/notify/fdinfo.c; then
+              echo "❌ fdinfo.c 仍存在 inotify_mark_user_mask，修复未生效"
+              exit 1
+            fi
+            echo "✅ fdinfo.c 已修复：inotify_mark_user_mask(mark) -> mark->mask & IN_ALL_EVENTS，orig_flow: 后补空语句"
+          else
+            echo "fdinfo.c 无 inotify_mark_user_mask（6.1+ 内核本身具备该函数），无需修复"
+          fi
+
       # - name: Fix SukiSU SUSFS compatibility
       #   if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
       #   run: |

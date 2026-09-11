@@ -425,82 +425,69 @@ jobs:
               echo "已还原 swap_slots.h"
             fi
 
-      # 修复 SUSFS 补丁在 5.10/5.15 内核上对 fs/notify/fdinfo.c 的错误改写
-      # SUSFS 的 50_add_susfs_in_gki-*.patch 里 fdinfo.c 的 hunk 是按 6.1+ 内核写的：
-      #   1) 用了 5.10/5.15 中不存在的 inotify_mark_user_mask()（该函数 6.1 才引入，
-      #      -Werror,-Wimplicit-function-declaration 直接报错）
-      #   2) 补丁自带的 orig_flow: 标签被 patch -F 3 模糊应用到了 5.10/5.15 原有的
-      #      "u32 mask = mark->mask & IN_ALL_EVENTS;" 声明之前，clang 不允许标签后紧跟声明
-      #      （报 expected expression，进而 mask 未声明）
-      # 只有打了补丁后仍残留 inotify_mark_user_mask 的 5.10/5.15 树会走到这里；6.1+ 树本身有该函数，自动跳过。
-      - name: Fix SUSFS fdinfo.c for 5.10/5.15
-        working-directory: kernel_workspace/common
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -q 'inotify_mark_user_mask' fs/notify/fdinfo.c; then
-            echo "检测到 SUSFS 补丁向 fdinfo.c 注入了 6.1+ 的 inotify_mark_user_mask()，正在改回 5.10/5.15 写法..."
-            sed -i 's/inotify_mark_user_mask(mark)/mark->mask \& IN_ALL_EVENTS/g' fs/notify/fdinfo.c
-            echo "修正 orig_flow: 标签后紧跟声明导致的 clang expected expression..."
-            sed -i 's/^[[:space:]]*orig_flow:$/orig_flow: ;/' fs/notify/fdinfo.c
-            if grep -q 'inotify_mark_user_mask' fs/notify/fdinfo.c; then
-              echo "❌ fdinfo.c 仍存在 inotify_mark_user_mask，修复未生效"
-              exit 1
-            fi
-            echo "✅ fdinfo.c 已修复：inotify_mark_user_mask(mark) -> mark->mask & IN_ALL_EVENTS，orig_flow: 后补空语句"
-          else
-            echo "fdinfo.c 无 inotify_mark_user_mask（6.1+ 内核本身具备该函数），无需修复"
-          fi
-
-      # 修复 SUSFS 补丁在 5.10/5.15 上 fs/statfs.c 的 extern 声明顺序问题
-      # 5.10/5.15 补丁把 extern 声明放在 vfs_get_fsid 之后，而新函数
-      # susfs_statfs_by_dentry()（在其之前）已经调用了 susfs_sus_kstat_spoof_vfs_statfs()，
-      # 调用点看不到声明 -> -Werror,-Wimplicit-function-declaration。
-      # 该函数定义在 fs/susfs.c，补前向声明即可（链接无碍）；6.1+ 树没有该 hunk，自动跳过。
-      - name: Fix SUSFS fs/statfs.c extern order for 5.10/5.15
+      # 修复 SUSFS 补丁/源码在 5.10、5.15 内核上的适配问题（6.1+ 树各项门控自动跳过）
+      #   1) fs/notify/fdinfo.c  — 补丁 hunk 按 6.1+ 写：用了 5.10/5.15 没有的 inotify_mark_user_mask()
+      #                            （6.1 才引入）；且 patch -F 3 把 orig_flow: 标签模糊应用到了原有的
+      #                            "u32 mask = ..." 声明之前，clang 不允许标签后紧跟声明
+      #   2) fs/statfs.c         — susfs_sus_kstat_spoof_vfs_statfs() 的 extern 被放在 vfs_get_fsid 之后，
+      #                            而调用它的 susfs_statfs_by_dentry() 在其之前，调用点看不到声明
+      #   3) fs/susfs.c          — 5.10 分支调用了 security_sb_statfs() 却没 include <linux/security.h>
+      # 以上均为 -Werror,-Wimplicit-function-declaration / clang 语法错误，会直接中断构建。
+      - name: Fix SUSFS compatibility for 5.10/5.15
         working-directory: kernel_workspace/common
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          p = Path("fs/statfs.c")
-          if not p.exists():
-              print("fs/statfs.c 不存在，跳过")
-              raise SystemExit(0)
-          text = p.read_text()
-          anchor = "static int susfs_statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf, bool *is_fuse)"
-          decl = "extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);"
-          # 注意：该 extern 在补丁里本来就存在（只是位置在调用点之后），
-          # 所以不能用 "decl not in text" 判重，要看 decl 是否在 anchor 之前。
-          if anchor in text:
-              before = text.split(anchor, 1)[0]
-              if decl not in before:
-                  text = text.replace(anchor, decl + "\n" + anchor, 1)
+          fixed = []
+
+          # ---- 1) fs/notify/fdinfo.c ----
+          p = Path("fs/notify/fdinfo.c")
+          if p.exists():
+              text = p.read_text()
+              if "inotify_mark_user_mask" in text:
+                  # 6.1 的 inotify_mark_user_mask(mark) 在 5.10/5.15 等价于 mark->mask & IN_ALL_EVENTS
+                  text = text.replace("inotify_mark_user_mask(mark)", "mark->mask & IN_ALL_EVENTS")
+                  # 标签后必须跟语句，补空语句绕开 clang 的 expected expression
+                  text = re.sub(r"(?m)^[ \t]*orig_flow:[ \t]*$", "orig_flow: ;", text)
                   p.write_text(text)
-                  print("✅ 已为 fs/statfs.c 在 susfs_statfs_by_dentry 前补上前向声明")
+                  if "inotify_mark_user_mask" in p.read_text():
+                      raise SystemExit("❌ fdinfo.c 仍残留 inotify_mark_user_mask，修复未生效")
+                  fixed.append("fdinfo.c: inotify_mark_user_mask -> mark->mask & IN_ALL_EVENTS, orig_flow: 补空语句")
               else:
-                  print("fs/statfs.c 前向声明已存在，跳过")
-          else:
-              print("fs/statfs.c 无该 hunk（6.1+ 内核），跳过")
-          PY
+                  print("跳过 fdinfo.c（6.1+ 内核本身具备 inotify_mark_user_mask）")
 
-      # 修复 5.10 分支的 fs/susfs.c 缺 <linux/security.h> 导致的编译失败
-      # 5.10 分支独有代码 susfs_sus_kstat_spoof_vfs_statfs() 调用了
-      # security_sb_statfs()（声明在 include/linux/security.h），但 susfs.c 没 include。
-      # 6.1+ 分支的 susfs.c 无此调用，门控自动跳过。
-      - name: Fix SUSFS fs/susfs.c missing security.h for 5.10
-        working-directory: kernel_workspace/common
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -q 'security_sb_statfs(' fs/susfs.c && ! grep -q '#include <linux/security.h>' fs/susfs.c; then
-            sed -i '1i #include <linux/security.h>' fs/susfs.c
-            echo "✅ 已为 fs/susfs.c 补上 #include <linux/security.h>"
-          else
-            echo "fs/susfs.c 无需修复（无 security_sb_statfs 调用或已含 security.h）"
-          fi
+          # ---- 2) fs/statfs.c ----
+          p = Path("fs/statfs.c")
+          if p.exists():
+              text = p.read_text()
+              anchor = "static int susfs_statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf, bool *is_fuse)"
+              decl = "extern int susfs_sus_kstat_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf, bool *is_fuse);"
+              if anchor in text:
+                  # 该 extern 补丁里本来就有（只是在调用点之后），判重要看它是否已在 anchor 之前
+                  if decl not in text.split(anchor, 1)[0]:
+                      p.write_text(text.replace(anchor, decl + "\n" + anchor, 1))
+                      fixed.append("statfs.c: 为 susfs_statfs_by_dentry 补前向声明")
+                  else:
+                      print("跳过 statfs.c（前向声明已存在）")
+              else:
+                  print("跳过 statfs.c（6.1+ 内核无该 hunk）")
+
+          # ---- 3) fs/susfs.c ----
+          p = Path("fs/susfs.c")
+          if p.exists():
+              text = p.read_text()
+              if "security_sb_statfs(" in text and "#include <linux/security.h>" not in text:
+                  p.write_text("#include <linux/security.h>\n" + text)
+                  fixed.append("susfs.c: 补 #include <linux/security.h>")
+              else:
+                  print("跳过 susfs.c（无 security_sb_statfs 调用或已含 security.h）")
+
+          print("✅ 已修复: " + "; ".join(fixed) if fixed else "✅ 无需修复（6.1+ 内核）")
+          PY
 
       # - name: Fix SukiSU SUSFS compatibility
       #   if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}

@@ -486,6 +486,22 @@ jobs:
               print("fs/statfs.c 无该 hunk（6.1+ 内核），跳过")
           PY
 
+      # 修复 5.10 分支的 fs/susfs.c 缺 <linux/security.h> 导致的编译失败
+      # 5.10 分支独有代码 susfs_sus_kstat_spoof_vfs_statfs() 调用了
+      # security_sb_statfs()（声明在 include/linux/security.h），但 susfs.c 没 include。
+      # 6.1+ 分支的 susfs.c 无此调用，门控自动跳过。
+      - name: Fix SUSFS fs/susfs.c missing security.h for 5.10
+        working-directory: kernel_workspace/common
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'security_sb_statfs(' fs/susfs.c && ! grep -q '#include <linux/security.h>' fs/susfs.c; then
+            sed -i '1i #include <linux/security.h>' fs/susfs.c
+            echo "✅ 已为 fs/susfs.c 补上 #include <linux/security.h>"
+          else
+            echo "fs/susfs.c 无需修复（无 security_sb_statfs 调用或已含 security.h）"
+          fi
+
       # - name: Fix SukiSU SUSFS compatibility
       #   if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
       #   run: |

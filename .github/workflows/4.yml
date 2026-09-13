@@ -353,9 +353,6 @@ jobs:
         run: |
            cd kernel_workspace
            git clone -b oki-android16-6.12 https://github.com/cctv18/susfs4oki.git susfs4ksu
-           if [ "${{ github.event.inputs.RE_KERNEL }}" = "true" ]; then
-            git clone https://github.com/Sakion-Team/Re-Kernel.git
-           fi
 
            if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then
               echo "正在切换到sus提交"
@@ -476,13 +473,27 @@ jobs:
       - name: Apply RE_KERNEL
         if: ${{ github.event.inputs.RE_KERNEL == 'true' }}
         run: |
-          RE_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Re-Kernel/LKM-Source"
-          cd kernel_workspace/common
+          cd kernel_workspace
+          # clone 放在这里而不是 Set up susfs 里：Re-Kernel 与 SUSFS 互不依赖，
+          # 之前 clone 挂在 Set up susfs 内，enable_susfs=false 时整步被跳过，
+          # 这里就找不到 Re-Kernel/LKM-Source 而 cp 失败
+          if [ ! -d Re-Kernel ]; then
+            git clone --depth 1 https://github.com/Sakion-Team/Re-Kernel.git
+          fi
+          RE_DIR="$(pwd)/Re-Kernel/LKM-Source"
+          if [ ! -f "$RE_DIR/rekernel.h" ]; then
+            echo "❌ 未找到 $RE_DIR/rekernel.h，Re-Kernel 上游结构可能已变更"
+            exit 1
+          fi
+
+          cd common
           sed -i '/endmenu/i source "drivers/rekernel/Kconfig"' drivers/Kconfig
           sed -i '$a \#Re-Kernel Support\nobj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile
           mkdir -p drivers/rekernel
-          cp ${RE_DIR}/rekernel.c ${RE_DIR}/rekernel.h ${RE_DIR}/Makefile ${RE_DIR}/Kconfig drivers/rekernel/
-          sed -i "s|^\s*//\s*#define KERNEL_${KERNEL_SHORT_PATCH_VERSION}|\#define KERNEL_${KERNEL_SHORT_PATCH_VERSION}|" drivers/rekernel/rekernel.h
+          # 上游 2026-06-28 把 rekernel 拆成了多个编译单元(rekernel_main/netlink/binder/... )，
+          # 不再有单体 rekernel.c，所以这里整体拷贝，别写死文件名
+          cp "$RE_DIR"/*.c "$RE_DIR"/*.h "$RE_DIR"/Makefile "$RE_DIR"/Kconfig drivers/rekernel/
+          ls -la drivers/rekernel/
 
       - name: 启用 Droidspaces 容器支持
         if: ${{ inputs.droidspaces_enable != 'false' }}
@@ -528,6 +539,10 @@ jobs:
           }
 
           # 应用 Droidspaces 容器必须补丁
+          # 导出 init_ipc_ns/put_ipc_ns：gki_defconfig 的 ANDROID_BINDER_IPC_RUST=m 会编出
+          # rust_binder.ko，而 rust_binderfs.c 在 CONFIG_IPC_NS 下引用这两个符号，
+          # 上游 ipc/ 通篇没有 EXPORT_SYMBOL，modpost 阶段必然报 undefined
+          apply_patch export_ipc_ns.patch || true
           apply_patch fix_sysvipc_kabi_a16-6.12.patch || true
           # 修补 oplus_bsp_midas 行为，避免开机崩溃（未切换一加源码时 hunk 落空属正常）
           apply_patch fix_oplus_bsp_midas.patch || true

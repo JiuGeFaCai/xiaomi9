@@ -12,15 +12,16 @@ on:
         default: false
         type: boolean
       ksu_variant:
-        description: "KernelSU 变体"
+        description: "KernelSU 变体(选“无”则不集成任何 KSU，此时必须同时关掉 SUSFS 与 KPM)"
         type: choice
         options:
           - SukiSU
           - ReSukiSU
+          - 无
         default: ReSukiSU
       sukisu_version:
-        description: "SukiSU/ReSukiSU 分支或提交"
-        required: true
+        description: "SukiSU/ReSukiSU 分支或提交 (ksu_variant 选“无”时忽略此项)"
+        required: false
         default: "main"
       ksu_version_override:
         description: "锁定 KSU 版本号(留空=上游默认。SukiSU 默认会联网取上游 main 提交数，与所选 commit 无关，需要对齐管理器版本时在此填数字，如 40819)"
@@ -171,12 +172,48 @@ jobs:
           echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
 
          
+      - name: Validate KSU / SUSFS / KPM combination
+        run: |
+          # ksu_variant=无 表示不集成任何 KernelSU：
+          #  - SUSFS 的内核侧代码直接调用 ksu_cred / susfs_is_current_ksu_domain() 等 KSU 符号，
+          #    没有 KSU 根本链接不过，所以这里必须拦住而不是静默关掉
+          #  - KPM 的 builtin 模式依赖 (Re)SukiSU 内置实现，同理
+          #  - kpn 是独立于 KSU 的 KPM 实现，可在无 KSU 环境下工作，故不拦
+          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
+          if [ "$KSU_VARIANT" != "无" ]; then
+            echo "KernelSU 变体: $KSU_VARIANT"
+            exit 0
+          fi
+
+          echo "已选择不集成 KernelSU"
+          FAILED=0
+          if [ "${{ github.event.inputs.enable_susfs }}" = "true" ]; then
+            echo "❌ ksu_variant=无 与 enable_susfs=true 冲突：SUSFS 依赖 KernelSU 提供的符号(ksu_cred 等)，无法在无 KSU 内核上编译"
+            FAILED=1
+          fi
+          if [ "${{ github.event.inputs.kpm_enable }}" = "builtin" ]; then
+            echo "❌ ksu_variant=无 与 kpm_enable=builtin 冲突：builtin KPM 由 (Re)SukiSU 提供"
+            FAILED=1
+          fi
+          if [ "$FAILED" = "1" ]; then
+            echo "请把 enable_susfs 关掉、kpm_enable 改为 false 或 kpn，或改选一个 KernelSU 变体后重试"
+            exit 1
+          fi
+          echo "✅ 无 KSU 模式：SUSFS 与 KPM 均已关闭，配置有效"
+
+      - name: Disable defconfig check in _setup_env.sh
+        run: |
+         cd kernel_workspace
+         # 这段 defconfig diff 校验会因为我们在 gki_defconfig 里追加 CONFIG_* 而报错，
+         # 与是否集成 KSU 无关，所以从 Set up SukiSU 里拆出来无条件执行
+         sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
+
       - name: Set up SukiSU
+        if: ${{ github.event.inputs.ksu_variant != '无' }}
         env:
           KSU_VER_OVERRIDE_IN: ${{ github.event.inputs.ksu_version_override }}
         run: |
          cd kernel_workspace
-         sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
          KSU_REF="${{ github.event.inputs.sukisu_version }}"
          case "$KSU_VARIANT" in
@@ -228,6 +265,13 @@ jobs:
          echo "KSUVER=${KSU_VERSION}" >> $GITHUB_ENV
          echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
+
+      - name: Mark no-KSU build
+        if: ${{ github.event.inputs.ksu_variant == '无' }}
+        run: |
+          echo "KSUVARIANT=NoKSU" >> $GITHUB_ENV
+          echo "KSUVER=0" >> $GITHUB_ENV
+          echo "已选择不集成 KernelSU，产物名与配置均不含 KSU/SUSFS/KPM"
 
       - name: Fix SukiSU 6.12 compatibility
         if: ${{ startsWith(github.event.inputs.ci_VERSION, 'android16-6.12') && (github.event.inputs.ksu_variant == 'SukiSU' || github.event.inputs.ksu_variant == 'ReSukiSU') }}
@@ -535,12 +579,17 @@ jobs:
         run: |
           cd kernel_workspace
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
-          # SukiSU Ultra配置
-          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-
-          # KPM配置
           KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
           KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
+
+          # KSU 本体配置(ksu_variant=无 时不写，此时上面已校验过 SUSFS/KPM 均为关闭)
+          if [ "$KSU_VARIANT" != "无" ]; then
+            echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
+          else
+            echo "无 KSU 模式，跳过 CONFIG_KSU / CONFIG_KSU_SUSFS"
+          fi
+
+          # KPM配置
           if [ "$KPM_ENABLE" = "builtin" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "ReSukiSU" ]; }; then
             echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
           fi

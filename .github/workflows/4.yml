@@ -64,6 +64,20 @@ on:
         description: "自定义版本来源后缀"
         required: false
         default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
+      enable_susfs:
+        description: "是否移植 SUSFS"
+        required: false
+        default: true
+        type: boolean
+      droidspaces_enable:
+        description: '是否启用Droidspaces容器支持(轻量化的完整Linux容器支持;false关闭,standard开启容器+ntsync支持,extend开启更多测试支持项)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'standard'
+          - 'extend'
       sus_enable:
         type: boolean
         description: "是否切换sus提交"
@@ -291,6 +305,7 @@ jobs:
          PY
          
       - name: Set up susfs
+        if: ${{ inputs.enable_susfs }}
         run: |
            cd kernel_workspace
            git clone -b oki-android16-6.12 https://github.com/cctv18/susfs4oki.git susfs4ksu
@@ -322,6 +337,7 @@ jobs:
            fi
 
       - name: Fix SUSFS exec.c header
+        if: ${{ inputs.enable_susfs }}
         run: |
           cd kernel_workspace/common
           # exec.c 用到的 susfs 符号会随版本变（旧版 *_umounted，新版 *_no_su），
@@ -424,6 +440,96 @@ jobs:
           cp ${RE_DIR}/rekernel.c ${RE_DIR}/rekernel.h ${RE_DIR}/Makefile ${RE_DIR}/Kconfig drivers/rekernel/
           sed -i "s|^\s*//\s*#define KERNEL_${KERNEL_SHORT_PATCH_VERSION}|\#define KERNEL_${KERNEL_SHORT_PATCH_VERSION}|" drivers/rekernel/rekernel.h
 
+      - name: 启用 Droidspaces 容器支持
+        if: ${{ inputs.droidspaces_enable != 'false' }}
+        env:
+          CI_VERSION: ${{ github.event.inputs.ci_VERSION }}
+          DROIDSPACES_MODE: ${{ github.event.inputs.droidspaces_enable }}
+        run: |
+          echo "正在启用 Droidspaces 容器支持 (模式: $DROIDSPACES_MODE)..."
+          # 补丁随本仓库分发，checkout 后就在 $GITHUB_WORKSPACE/droidspaces_patch 下，无需联网拉取
+          DS_PATCH_DIR="$GITHUB_WORKSPACE/droidspaces_patch"
+          if [ ! -d "$DS_PATCH_DIR" ]; then
+            echo "❌ 未找到 $DS_PATCH_DIR，droidspaces 补丁目录缺失"
+            exit 1
+          fi
+
+          # ANDROID_VERSION / KERNEL_VERSION 从 ci_VERSION (如 android16-6.12-2025-06) 首两段拆出，
+          # 用于拼 ntsync 补丁名，保持与文件名 ntsync_compat_android16-6.12.patch 一致
+          ANDROID_VERSION="$(echo "$CI_VERSION" | cut -d- -f1)"
+          KERNEL_VERSION="$(echo "$CI_VERSION" | cut -d- -f2)"
+          NTSYNC_PATCH="ntsync_compat_${ANDROID_VERSION}-${KERNEL_VERSION}.patch"
+
+          cd kernel_workspace/common
+
+          apply_patch() {
+            local pf="$1"
+            if [ ! -f "$DS_PATCH_DIR/$pf" ]; then
+              echo "::warning::补丁不存在，跳过: $pf"
+              return 1
+            fi
+            cp "$DS_PATCH_DIR/$pf" ./
+            echo "应用补丁: $pf"
+            # patch 挂了也别让这一步失败（后面编译时才炸更难看），只记录下来；
+            # 比较前后的 .rej 差集才能定位是哪个补丁落空的 hunk
+            local before after rc=0
+            before="$(find . -name '*.rej' | sort)"
+            patch -p1 -F 3 < "$pf" || rc=1
+            after="$(find . -name '*.rej' | sort)"
+            if [ "$before" != "$after" ]; then
+              echo "::warning::$pf 有 hunk 被拒绝："
+              comm -13 <(echo "$before") <(echo "$after")
+            fi
+            return $rc
+          }
+
+          # 应用 Droidspaces 容器必须补丁
+          apply_patch fix_sysvipc_kabi_a16-6.12.patch || true
+          # 修补 oplus_bsp_midas 行为，避免开机崩溃（未切换一加源码时 hunk 落空属正常）
+          apply_patch fix_oplus_bsp_midas.patch || true
+          # 修补 oplus_bsp_sched_assist 数组越界访问导致的运行时随机崩溃
+          apply_patch ddl_hit_hook.patch || true
+
+          # 开启 Droidspaces 容器所需内核支持
+          CONFIG_FILE=./arch/arm64/configs/gki_defconfig
+          echo "CONFIG_PID_NS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_IPC_NS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_USER_NS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_SYSVIPC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_DEVTMPFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_NAMESPACES=y" >> "$CONFIG_FILE"
+          echo "CONFIG_POSIX_MQUEUE=y" >> "$CONFIG_FILE"
+          echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "$CONFIG_FILE"
+          echo "CONFIG_NETFILTER_XT_TARGET_LOG=y" >> "$CONFIG_FILE"
+          echo "CONFIG_NETFILTER_XT_MATCH_RECENT=y" >> "$CONFIG_FILE"
+          # 未经测试的配置选项，可能导致bug
+          # echo "CONFIG_CGROUP_DEVICE=y" >> "$CONFIG_FILE"
+          # echo "CONFIG_CGROUP_PIDS=y" >> "$CONFIG_FILE"
+          # echo "CONFIG_FW_LOADER_COMPRESS=y" >> "$CONFIG_FILE"
+          # echo "CONFIG_BRIDGE_NETFILTER=y" >> "$CONFIG_FILE"
+          # echo "CONFIG_NF_TABLES=y" >> "$CONFIG_FILE"
+
+          # 开启 NTSync：6.12 上该选项原为 "depends on BROKEN"，靠 ntsync 补丁改成可选，
+          # 补丁没打上时写 CONFIG_NTSYNC=y 会被 kconfig 判为 unmet dependency 而丢弃
+          if apply_patch "$NTSYNC_PATCH"; then
+            echo "CONFIG_NTSYNC=y" >> "$CONFIG_FILE"
+          else
+            echo "::warning::$NTSYNC_PATCH 未成功应用，跳过 CONFIG_NTSYNC"
+          fi
+
+          if [ "$DROIDSPACES_MODE" = "extend" ]; then
+            echo "正在启用容器环境扩展支持..."
+            # 开启虚拟 HCI 设备支持
+            echo "CONFIG_BT_HCIVHCI=y" >> "$CONFIG_FILE"
+            # 开启 systemd-coredump 支持
+            echo "CONFIG_STATIC_USERMODEHELPER=n" >> "$CONFIG_FILE"
+            # 添加 Lindroid EVDI DRM 驱动（上游亦保持注释：未经测试，可能导致 bug）
+            # cp "$DS_PATCH_DIR/evdi_drm.patch" ./
+            # patch -p1 -F 3 < evdi_drm.patch || true
+            # echo "CONFIG_DRM_LINDROID_EVDI=y" >> "$CONFIG_FILE"
+          fi
+          echo "✅ Droidspaces 容器支持配置完成"
+
 
       - name: Add SUSFS Configuration Settings
         run: |
@@ -453,6 +559,7 @@ jobs:
           # fi
 
           # SUSFS配置
+          if [ "${{ github.event.inputs.enable_susfs }}" = "true" ]; then
           echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
@@ -463,6 +570,9 @@ jobs:
           echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+          else
+          echo "已关闭 SUSFS 移植，跳过 SUSFS 内核配置"
+          fi
 
           # Re-Kernel配置*
           if [ "${{ github.event.inputs.RE_KERNEL }}" = "true" ]; then

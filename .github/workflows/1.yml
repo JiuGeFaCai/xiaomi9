@@ -805,7 +805,7 @@ jobs:
           # KPM配置
           KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
           KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
-          if [ "$KPM_ENABLE" = "builtin" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "ReSukiSU" ]; }; then
+          if [ "$KPM_ENABLE" = "builtin" ]; then
             echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
           fi
 

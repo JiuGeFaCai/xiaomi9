@@ -561,6 +561,9 @@ jobs:
           echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "$CONFIG_FILE"
           echo "CONFIG_NETFILTER_XT_TARGET_LOG=y" >> "$CONFIG_FILE"
           echo "CONFIG_NETFILTER_XT_MATCH_RECENT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_NETFILTER_XT_TARGET_REJECT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_IP_SET=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
           # 未经测试的配置选项，可能导致bug
           # echo "CONFIG_CGROUP_DEVICE=y" >> "$CONFIG_FILE"
           # echo "CONFIG_CGROUP_PIDS=y" >> "$CONFIG_FILE"

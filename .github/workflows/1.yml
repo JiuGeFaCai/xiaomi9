@@ -25,7 +25,7 @@ on:
           - none
         default: BakaSU
       sukisu_version:
-        description: "KSU 分支/标签/提交（留空自动；Next 用 dev-susfs；ksu+SUSFS 可匹配兼容提交；none 忽略）"
+        description: "KSU 分支/标签/提交（留空自动；SukiSU 用 builtin；Next 用 dev-susfs；ksu+SUSFS 可匹配兼容提交；none 忽略）"
         required: false
         default: ""
       ksu_version_override:
@@ -243,7 +243,9 @@ jobs:
 
           KSU_REF="$(printf '%s' "${KSU_REF_IN:-}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
           if [ -z "$KSU_REF" ]; then
-            if [ "$KSU_VARIANT" = "ksunext" ]; then
+            if [ "$KSU_VARIANT" = "SukiSU" ]; then
+              KSU_REF=builtin
+            elif [ "$KSU_VARIANT" = "ksunext" ]; then
               KSU_REF=dev-susfs
             else
               KSU_REF=main

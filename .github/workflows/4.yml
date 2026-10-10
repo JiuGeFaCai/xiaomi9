@@ -12,23 +12,25 @@ on:
         default: false
         type: boolean
       ksu_variant:
-        description: "KernelSU 变体(选“无”则不集成任何 KSU，此时必须同时关掉 SUSFS 与 KPM)"
+        description: "KernelSU 变体（ksunext=Next，ksu=官方，none=不集成）"
         type: choice
         options:
           - SukiSU
           - BakaSU
-          - 无
+          - ksunext
+          - ksu
+          - none
         default: BakaSU
       sukisu_version:
-        description: "SukiSU/BakaSU 分支或提交 (ksu_variant 选“无”时忽略此项)"
+        description: "KSU 分支/标签/提交（留空自动；Next 用 dev-susfs；ksu+SUSFS 可匹配兼容提交；none 忽略）"
         required: false
-        default: "main"
+        default: ""
       ksu_version_override:
         description: "锁定 KSU 版本号(留空=上游默认。SukiSU 默认会联网取上游 main 提交数，与所选 commit 无关，需要对齐管理器版本时在此填数字，如 40819)"
         required: false
         default: ""
       kpm_enable:
-        description: '是否开启kpm(builtin-使用SukiSU/BakaSU内置kpm, kpn-使用独立kpm实现(支持任意KSU/面具环境); 不需要可保持默认关闭)'
+        description: 'KPM 模式（builtin 需所选源码内置支持；kpn 为独立实现；false 关闭）'
         required: true
         type: choice
         default: 'false'
@@ -66,7 +68,7 @@ on:
         required: false
         default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
       enable_susfs:
-        description: "是否移植 SUSFS"
+        description: "是否移植 SUSFS（none 模式自动跳过）"
         required: false
         default: true
         type: boolean
@@ -117,6 +119,15 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve KernelSU options
+        env:
+          KSU_VARIANT_INPUT: ${{ inputs.ksu_variant }}
+          KSU_REF_INPUT: ${{ inputs.sukisu_version }}
+          KSU_VERSION_OVERRIDE_INPUT: ${{ inputs.ksu_version_override }}
+          KSU_SUSFS_INPUT: ${{ inputs.enable_susfs }}
+          KSU_KPM_INPUT: ${{ inputs.kpm_enable }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" resolve
           
       - name: Configure Git
         run: |
@@ -172,35 +183,6 @@ jobs:
           echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
 
          
-      - name: Validate KSU / SUSFS / KPM combination
-        run: |
-          # ksu_variant=无 表示不集成任何 KernelSU：
-          #  - SUSFS 的内核侧代码直接调用 ksu_cred / susfs_is_current_ksu_domain() 等 KSU 符号，
-          #    没有 KSU 根本链接不过，所以这里必须拦住而不是静默关掉
-          #  - KPM 的 builtin 模式依赖 SukiSU/BakaSU 内置实现，同理
-          #  - kpn 是独立于 KSU 的 KPM 实现，可在无 KSU 环境下工作，故不拦
-          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
-          if [ "$KSU_VARIANT" != "无" ]; then
-            echo "KernelSU 变体: $KSU_VARIANT"
-            exit 0
-          fi
-
-          echo "已选择不集成 KernelSU"
-          FAILED=0
-          if [ "${{ github.event.inputs.enable_susfs }}" = "true" ]; then
-            echo "❌ ksu_variant=无 与 enable_susfs=true 冲突：SUSFS 依赖 KernelSU 提供的符号(ksu_cred 等)，无法在无 KSU 内核上编译"
-            FAILED=1
-          fi
-          if [ "${{ github.event.inputs.kpm_enable }}" = "builtin" ]; then
-            echo "❌ ksu_variant=无 与 kpm_enable=builtin 冲突：builtin KPM 由 SukiSU/BakaSU 提供"
-            FAILED=1
-          fi
-          if [ "$FAILED" = "1" ]; then
-            echo "请把 enable_susfs 关掉、kpm_enable 改为 false 或 kpn，或改选一个 KernelSU 变体后重试"
-            exit 1
-          fi
-          echo "✅ 无 KSU 模式：SUSFS 与 KPM 均已关闭，配置有效"
-
       - name: Disable defconfig check in _setup_env.sh
         run: |
          cd kernel_workspace
@@ -209,72 +191,42 @@ jobs:
          sed -i '/diff -u "${source_config}" ${OUT_DIR}\/defconfig >&2 || RES=$?/,/^[[:space:]]*fi$/d' build/kernel/_setup_env.sh
 
       - name: Set up KernelSU
-        if: ${{ github.event.inputs.ksu_variant != '无' }}
-        env:
-          KSU_VER_OVERRIDE_IN: ${{ github.event.inputs.ksu_version_override }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" setup "$GITHUB_WORKSPACE/kernel_workspace"
+
+      - name: Set up susfs
+        if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
         run: |
-         cd kernel_workspace
-         KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
-         KSU_REF="${{ github.event.inputs.sukisu_version }}"
-         case "$KSU_VARIANT" in
-           "SukiSU")
-             echo "添加 SukiSU..."
-             curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_REF"
-             ;;
-           "BakaSU")
-             echo "添加 BakaSU..."
-             curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s "$KSU_REF"
-             ;;
-           *)
-             echo "未知 KernelSU 变体: $KSU_VARIANT"
-             exit 1
-             ;;
-         esac
-         cd KernelSU
-         # SukiSU 的 kernel/Kbuild 用 curl 现查上游 main 的提交数来算版本号
-         # (GITHUB_COMMITS -> LOCAL_COUNT -> KSU_VERSION)，跟实际 checkout 的 commit 无关，
-         # 即使 pin 了提交也会拿到上游最新的数字；BakaSU 数的是 HEAD，本身正常。
-         # 管理器只在版本号完全相等时才不报"版本不一致"，需要对齐就用这个覆盖。
-         KSU_VER_OVERRIDE="$(printf '%s' "${KSU_VER_OVERRIDE_IN:-}" | tr -d '[:space:]')"
-         if [ -n "$KSU_VER_OVERRIDE" ]; then
-           case "$KSU_VER_OVERRIDE" in
-             *[!0-9]*) echo "❌ ksu_version_override 必须是纯数字，当前为: $KSU_VER_OVERRIDE"; exit 1 ;;
-           esac
-           PATCHED=0
-           for VF in kernel/Kbuild kernel/Makefile; do
-             [ -f "$VF" ] || continue
-             # 只匹配 KSU_VERSION 自身的 := 赋值，不碰 KSU_VERSION_FULL / KSU_VERSION_API / KSU_LOCAL_VERSION
-             if grep -qE '^[[:space:]]*KSU_VERSION[[:space:]]*:=' "$VF"; then
-               sed -i -E "s|^([[:space:]]*)KSU_VERSION[[:space:]]*:=.*|\1KSU_VERSION := $KSU_VER_OVERRIDE|" "$VF"
-               echo "✅ 已锁定 $VF 中的 KSU_VERSION := $KSU_VER_OVERRIDE"
-               PATCHED=1
-             fi
-           done
-           if [ "$PATCHED" = "0" ]; then
-             echo "❌ 未在 kernel/Kbuild 或 kernel/Makefile 找到 KSU_VERSION := 赋值，上游结构可能已变更"
-             exit 1
+           cd kernel_workspace
+           git clone -b oki-android16-6.12 https://github.com/cctv18/susfs4oki.git susfs4ksu
+
+           if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then
+              echo "正在切换到sus提交"
+              cd susfs4ksu
+              git checkout ${{ github.event.inputs.sus_version }}
+              cd ..
+            fi
+
+           git clone https://github.com/ShirkNeko/SukiSU_patch.git
+           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android16-6.12.patch ./common/
+           cp susfs4ksu/kernel_patches/fs/* ./common/fs/
+           cp susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+
+           # Apply patches
+           cd ./common
+           patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch || true
+
+           # patch 后面挂了 || true，被拒的 hunk 不会让这一步失败，
+           # 只会在后面编译时才炸（比如 exec.c 少了 susfs_def.h），所以先把 .rej 打出来
+           if find . -name '*.rej' | grep -q .; then
+             echo "::warning::以下 hunk 被拒绝，需人工确认："
+             find . -name '*.rej' -print -exec cat {} \;
            fi
-         fi
-         if [ -n "$KSU_VER_OVERRIDE" ]; then
-           KSU_VERSION="$KSU_VER_OVERRIDE"
-         elif [ "$KSU_VARIANT" = "SukiSU" ]; then
-           KSU_VERSION=$(expr $(git rev-list --count main) + 37185 2>/dev/null || echo 114514)
-         else
-           KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
-         fi
-         echo "KSUVER=${KSU_VERSION}" >> $GITHUB_ENV
-         echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
-         export KSU_VERSION=$KSU_VERSION
 
-      - name: Mark no-KSU build
-        if: ${{ github.event.inputs.ksu_variant == '无' }}
-        run: |
-          echo "KSUVARIANT=NoKSU" >> $GITHUB_ENV
-          echo "KSUVER=0" >> $GITHUB_ENV
-          echo "已选择不集成 KernelSU，产物名与配置均不含 KSU/SUSFS/KPM"
+      - name: Finalize KernelSU
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" finalize "$GITHUB_WORKSPACE/kernel_workspace/susfs4ksu"
 
-      - name: Fix SukiSU/BakaSU 6.12 compatibility
-        if: ${{ startsWith(github.event.inputs.ci_VERSION, 'android16-6.12') && (github.event.inputs.ksu_variant == 'SukiSU' || github.event.inputs.ksu_variant == 'BakaSU') }}
+      - name: Fix KernelSU 6.12 compatibility
+        if: ${{ startsWith(github.event.inputs.ci_VERSION, 'android16-6.12') && env.KSU_ENABLED == 'true' }}
         run: |
          cd kernel_workspace
          python3 - <<'PY'
@@ -285,6 +237,7 @@ jobs:
              Path("common/drivers/kernelsu"),
              Path("drivers/kernelsu"),
              Path("KernelSU/kernel"),
+             Path("KernelSU-Next/kernel"),
          ]
 
          netlink_h = Path("common/include/linux/netlink.h")
@@ -345,40 +298,11 @@ jobs:
                  print(f"Adapted security_add_hooks lsm_id argument: {lsm_hook_c}")
 
          if not changed:
-             print("SukiSU/BakaSU 6.12 compatibility fix did not need changes.")
+             print("KernelSU 6.12 compatibility fix did not need changes.")
          PY
          
-      - name: Set up susfs
-        if: ${{ inputs.enable_susfs }}
-        run: |
-           cd kernel_workspace
-           git clone -b oki-android16-6.12 https://github.com/cctv18/susfs4oki.git susfs4ksu
-
-           if [ "${{ github.event.inputs.sus_enable }}" = "true" ]; then
-              echo "正在切换到sus提交"
-              cd susfs4ksu
-              git checkout ${{ github.event.inputs.sus_version }}
-              cd ..
-            fi
-           
-           git clone https://github.com/ShirkNeko/SukiSU_patch.git
-           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android16-6.12.patch ./common/
-           cp susfs4ksu/kernel_patches/fs/* ./common/fs/
-           cp susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-
-           # Apply patches
-           cd ./common
-           patch -p1 < 50_add_susfs_in_gki-android16-6.12.patch || true
-
-           # patch 后面挂了 || true，被拒的 hunk 不会让这一步失败，
-           # 只会在后面编译时才炸（比如 exec.c 少了 susfs_def.h），所以先把 .rej 打出来
-           if find . -name '*.rej' | grep -q .; then
-             echo "::warning::以下 hunk 被拒绝，需人工确认："
-             find . -name '*.rej' -print -exec cat {} \;
-           fi
-
       - name: Fix SUSFS exec.c header
-        if: ${{ inputs.enable_susfs }}
+        if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
         run: |
           cd kernel_workspace/common
           # exec.c 用到的 susfs 符号会随版本变（旧版 *_umounted，新版 *_no_su），
@@ -593,53 +517,11 @@ jobs:
           echo "✅ Droidspaces 容器支持配置完成"
 
 
-      - name: Add SUSFS Configuration Settings
+      - name: Configure KernelSU and optional features
         run: |
           cd kernel_workspace
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
-          KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
-          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
-
-          # KSU 本体配置(ksu_variant=无 时不写，此时上面已校验过 SUSFS/KPM 均为关闭)
-          if [ "$KSU_VARIANT" != "无" ]; then
-            echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-          else
-            echo "无 KSU 模式，跳过 CONFIG_KSU / CONFIG_KSU_SUSFS"
-          fi
-
-          # KPM配置
-          if [ "$KPM_ENABLE" = "builtin" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "BakaSU" ]; }; then
-            echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
-          fi
-
-          # # HOOK配置
-          # if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_KPROBES_HOOK=y" >> "$CONFIG_FILE"
-          # elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
-          # elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_TRACEPOINT_HOOK=y" >> "$CONFIG_FILE"
-          # fi
-
-          # SUSFS配置
-          if [ "${{ github.event.inputs.enable_susfs }}" = "true" ]; then
-          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
-          else
-          echo "已关闭 SUSFS 移植，跳过 SUSFS 内核配置"
-          fi
+          python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" config "$CONFIG_FILE"
 
           # Re-Kernel配置*
           if [ "${{ github.event.inputs.RE_KERNEL }}" = "true" ]; then

@@ -23,22 +23,25 @@ on:
         required: true
         default: '6.1'
       ksu_variant:
-        description: "KernelSU 变体"
+        description: "KernelSU 变体（ksunext=Next，ksu=官方，none=不集成）"
         type: choice
         options:
           - SukiSU
           - BakaSU
+          - ksunext
+          - ksu
+          - none
         default: BakaSU
       sukisu_version:
-        description: "SukiSU/BakaSU 分支或提交"
-        required: true
-        default: "main"
+        description: "KSU 分支/标签/提交（留空自动；Next 用 dev-susfs；ksu+SUSFS 可匹配兼容提交；none 忽略）"
+        required: false
+        default: ""
       ksu_version_override:
         description: "锁定 KSU 版本号(留空=上游默认。SukiSU 默认会联网取上游 main 提交数，与所选 commit 无关，需要对齐管理器版本时在此填数字，如 40819)"
         required: false
         default: ""
       kpm_enable:
-        description: '是否开启kpm(builtin-使用SukiSU/BakaSU内置kpm, kpn-使用独立kpm实现(支持任意KSU/面具环境); 不需要可保持默认关闭)'
+        description: 'KPM 模式（builtin 需所选源码内置支持；kpn 为独立实现；false 关闭）'
         required: true
         type: choice
         default: 'false'
@@ -70,6 +73,11 @@ on:
         description: "自定义版本来源后缀"
         required: false
         default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
+      enable_susfs:
+        description: "是否移植 SUSFS（none 模式自动跳过）"
+        required: false
+        default: true
+        type: boolean
       sus_enable:
         type: boolean
         description: "是否切换sus提交"
@@ -109,6 +117,15 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve KernelSU options
+        env:
+          KSU_VARIANT_INPUT: ${{ inputs.ksu_variant }}
+          KSU_REF_INPUT: ${{ inputs.sukisu_version }}
+          KSU_VERSION_OVERRIDE_INPUT: ${{ inputs.ksu_version_override }}
+          KSU_SUSFS_INPUT: ${{ inputs.enable_susfs }}
+          KSU_KPM_INPUT: ${{ inputs.kpm_enable }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" resolve
           
       - name: Configure Git
         run: |
@@ -188,67 +205,25 @@ jobs:
 
          
       - name: Set up KernelSU
-        env:
-          KSU_VER_OVERRIDE_IN: ${{ github.event.inputs.ksu_version_override }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" setup "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform"
+
+      - name: Prepare ZRAM sources
+        if: ${{ inputs.ZRAM }}
         run: |
-         cd kernel_workspace/kernel_platform
-         KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
-         KSU_REF="${{ github.event.inputs.sukisu_version }}"
-         case "$KSU_VARIANT" in
-           "SukiSU")
-             echo "添加 SukiSU..."
-             curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_REF"
-             ;;
-           "BakaSU")
-             echo "添加 BakaSU..."
-             curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s "$KSU_REF"
-             ;;
-           *)
-             echo "未知 KernelSU 变体: $KSU_VARIANT"
-             exit 1
-             ;;
-         esac
-         cd KernelSU
-         TAG_SUFFIX="${{ github.event.inputs.sukisu_tag }}"
-         # 使用正确变量名 KSU_VERSION_API 替换函数体
-         # sed -i "s|\$(shell cd \$(KSU_SRC); \$(GIT_BIN) rev-parse --abbrev-ref HEAD)|$TAG_SUFFIX|g" kernel/Kbuild
-         # SukiSU 的 kernel/Kbuild 用 curl 现查上游 main 的提交数来算版本号
-         # (GITHUB_COMMITS -> LOCAL_COUNT -> KSU_VERSION)，跟实际 checkout 的 commit 无关，
-         # 即使 pin 了提交也会拿到上游最新的数字；BakaSU 数的是 HEAD，本身正常。
-         # 管理器只在版本号完全相等时才不报"版本不一致"，需要对齐就用这个覆盖。
-         KSU_VER_OVERRIDE="$(printf '%s' "${KSU_VER_OVERRIDE_IN:-}" | tr -d '[:space:]')"
-         if [ -n "$KSU_VER_OVERRIDE" ]; then
-           case "$KSU_VER_OVERRIDE" in
-             *[!0-9]*) echo "❌ ksu_version_override 必须是纯数字，当前为: $KSU_VER_OVERRIDE"; exit 1 ;;
-           esac
-           PATCHED=0
-           for VF in kernel/Kbuild kernel/Makefile; do
-             [ -f "$VF" ] || continue
-             # 只匹配 KSU_VERSION 自身的 := 赋值，不碰 KSU_VERSION_FULL / KSU_VERSION_API / KSU_LOCAL_VERSION
-             if grep -qE '^[[:space:]]*KSU_VERSION[[:space:]]*:=' "$VF"; then
-               sed -i -E "s|^([[:space:]]*)KSU_VERSION[[:space:]]*:=.*|\1KSU_VERSION := $KSU_VER_OVERRIDE|" "$VF"
-               echo "✅ 已锁定 $VF 中的 KSU_VERSION := $KSU_VER_OVERRIDE"
-               PATCHED=1
-             fi
-           done
-           if [ "$PATCHED" = "0" ]; then
-             echo "❌ 未在 kernel/Kbuild 或 kernel/Makefile 找到 KSU_VERSION := 赋值，上游结构可能已变更"
-             exit 1
-           fi
-         fi
-         if [ -n "$KSU_VER_OVERRIDE" ]; then
-           KSU_VERSION="$KSU_VER_OVERRIDE"
-         elif [ "$KSU_VARIANT" = "SukiSU" ]; then
-           KSU_VERSION=$(expr $(git rev-list --count main) + 37185 2>/dev/null || echo 114514)
-         else
-           KSU_VERSION=$(expr $(git rev-list --count HEAD) + 30700 2>/dev/null || echo 114514)
-         fi
-         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-         echo "KSUVARIANT=$KSU_VARIANT" >> $GITHUB_ENV
-         export KSU_VERSION=$KSU_VERSION
-         echo "✅ Injected custom version: v${KSU_VERSION}@$TAG_SUFFIX"
-         
+          cd kernel_workspace
+          git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          cd kernel_platform
+          if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
+          echo "正在打zram补丁"
+          cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+          cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+          cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+          cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
+          echo "zram_patch完成"
+          fi
+
       - name: Set up susfs
+        if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
         run: |
            cd kernel_workspace
            if [ "${{ github.event.inputs.CPU }}" = "sm8850" ] || [ "${{ github.event.inputs.CPU }}" = "sm8650" ]; then
@@ -263,20 +238,11 @@ jobs:
               cd ..
             fi
 
-           git clone https://github.com/ShirkNeko/SukiSU_patch.git
            cd kernel_platform        
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
-           echo "正在打zram补丁"
-           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
-           cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
-           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
-           cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
-           echo "zram_patch完成"
-           fi
 
            # Apply patches
            cd ./common
@@ -432,6 +398,9 @@ jobs:
       #     set -euo pipefail
       #     python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform"
 
+      - name: Finalize KernelSU
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" finalize "$GITHUB_WORKSPACE/kernel_workspace/susfs4ksu"
+
       - name: Apply LZ4KD
         if: ${{ github.event.inputs.ZRAM == 'true' }}
         run: |
@@ -464,45 +433,11 @@ jobs:
             patch -p1 --forward < "unicode_bypass_fix_6.1+.patch"
           fi
            
-      - name: Add SUSFS Configuration Settings
+      - name: Configure KernelSU and optional features
         run: |
           cd kernel_workspace/kernel_platform
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
-          # SukiSU Ultra配置
-          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-
-          # KPM配置
-          KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
-          KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
-          if [ "$KPM_ENABLE" = "builtin" ] && { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "BakaSU" ]; }; then
-            echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
-          fi
-
-          # # HOOK配置
-          # if [ "${{ github.event.inputs.HOOK }}" = "kprobe" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_KPROBES_HOOK=y" >> "$CONFIG_FILE"
-          # elif [ "${{ github.event.inputs.HOOK }}" = "manual" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
-          # elif [ "${{ github.event.inputs.HOOK }}" = "tracepoint" ]; then
-          #   echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-          #   echo "CONFIG_KSU_TRACEPOINT_HOOK=y" >> "$CONFIG_FILE"
-          # fi
-
-          # SUSFS配置
-          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
-
+          python3 "$GITHUB_WORKSPACE/.github/scripts/ksu_workflow.py" config "$CONFIG_FILE"
 
           # LZ4KD配置*
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then

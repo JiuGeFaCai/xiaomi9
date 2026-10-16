@@ -369,7 +369,7 @@ jobs:
               cd ..
             fi
 
-           git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
+           git clone https://github.com/JiuGeFaCai/sturdy-journey.git
 
            cd kernel_platform        
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/

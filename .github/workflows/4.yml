@@ -598,7 +598,7 @@ jobs:
         if: ${{ inputs.enable_oneplus_patch }}
         run: |
          cd kernel_workspace
-         git clone https://$TOKEN@github.com/JiuGeFaCai/sturdy-journey.git
+         git clone https://github.com/JiuGeFaCai/sturdy-journey.git
          cp ./sturdy-journey/lsm.patch ./common/
          cd ./common
          patch -p1 -F 3 < lsm.patch

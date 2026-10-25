@@ -453,7 +453,7 @@ jobs:
 
            SUSFS_PATCH="50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch"
            python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_namespace_patch.py" "$PWD" "$SUSFS_PATCH"
-           patch --batch -p1 -F 3 < "$SUSFS_PATCH"
+           patch --batch -p1 -F 3 < "$SUSFS_PATCH" || true
 
            # Revert
            if [ "$fake_patched" = 1 ]; then
@@ -702,6 +702,10 @@ jobs:
           echo "BakaSU SUSFS compat cwd: $(pwd)"
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
+          def without_comments(text):
+              return re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
 
           def preprocessor_delta(text):
               opens = 0
@@ -727,6 +731,11 @@ jobs:
 
           if not candidates:
               raise SystemExit("未找到实际 BakaSU 源码目录，无法应用 SUSFS 兼容修复")
+
+          selinux_hooks = without_comments("\n".join(
+              path.read_text(errors="ignore")
+              for path in Path("common/security/selinux").rglob("*.c")
+          ))
 
           for kernel_dir in candidates:
               print(f"检查 BakaSU SUSFS 源码目录: {kernel_dir}")
@@ -782,39 +791,79 @@ jobs:
               selinux_c = kernel_dir / "selinux/selinux.c"
               if selinux_c.exists():
                   text = selinux_c.read_text()
-                  compat_symbols = [
-                      "ksu_selinux_hide_running",
-                      "struct selinux_state fake_state",
-                      "struct selinux_policy *backup_sepolicy",
-                      "security_context_to_sid_with_policy",
-                      "security_sid_to_context_with_policy",
-                      "security_compute_av_user_with_policy",
+                  source_text = without_comments("\n".join(
+                      path.read_text(errors="ignore")
+                      for path in kernel_dir.rglob("*.c")
+                  ))
+
+                  def needs_definition(symbol, declaration):
+                      # A header's extern declaration is not a definition.
+                      # __maybe_static becomes global for SUSFS manual hooks.
+                      return (
+                          re.search(rf"\b{symbol}\b", selinux_hooks) is not None
+                          and re.search(
+                              rf"(?m)^[ \t]*(?:__maybe_static[ \t]+)?{declaration}",
+                              source_text,
+                          ) is None
+                      )
+
+                  globals_to_add = [
+                      ("fake_state", r"struct\s+selinux_state\s+fake_state\s*(?:;|=)",
+                       "struct selinux_state fake_state;"),
+                      ("ksu_selinux_hide_running", r"bool\s+ksu_selinux_hide_running\b[^;\n]*(?:;|=)",
+                       "bool ksu_selinux_hide_running __read_mostly = false;"),
+                      ("backup_sepolicy", r"struct\s+selinux_policy\s*\*\s*backup_sepolicy\s*(?:;|=)",
+                       "struct selinux_policy *backup_sepolicy;"),
                   ]
-                  if not all(symbol in tree_text for symbol in compat_symbols):
-                      anchor = "u32 ksu_file_sid __read_mostly = 0;\n"
-                      block = "\n".join([
-                          "",
-                          "/* ABK: simonpunk SUSFS SELinux hooks reference KernelSU selinux_hide globals. */",
-                          "#ifdef CONFIG_KSU_SUSFS",
-                          "struct selinux_state fake_state;",
-                          "bool ksu_selinux_hide_running __read_mostly = false;",
-                          "struct selinux_policy *backup_sepolicy;",
-                          "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)",
+                  missing = []
+                  definitions = []
+                  for symbol, declaration, definition in globals_to_add:
+                      if needs_definition(symbol, declaration):
+                          missing.append(symbol)
+                          definitions.append(definition)
+
+                  functions_to_add = [
+                      ("security_context_to_sid_with_policy", "int", [
                           "int security_context_to_sid_with_policy(struct selinux_policy *policy, const char *scontext, u32 scontext_len,",
                           "                                        u32 *sid, u32 def_sid, unsigned int gfp_flags)",
                           "{",
                           "    return -22;",
                           "}",
+                      ]),
+                      ("security_sid_to_context_with_policy", "int", [
                           "int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext,",
                           "                                        u32 *scontext_len)",
                           "{",
                           "    return -22;",
                           "}",
+                      ]),
+                      ("security_compute_av_user_with_policy", "void", [
                           "void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,",
                           "                                          struct av_decision *avd)",
                           "{",
                           "}",
+                      ]),
+                  ]
+                  function_definitions = []
+                  for symbol, result_type, definition in functions_to_add:
+                      declaration = rf"{result_type}\s+(?:__nocfi\s+)?{symbol}\s*\([^;{{}}]*\)\s*\{{"
+                      if needs_definition(symbol, declaration):
+                          missing.append(symbol)
+                          function_definitions.extend(definition)
+                  if function_definitions:
+                      definitions.extend([
+                          "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)",
+                          *function_definitions,
                           "#endif",
+                      ])
+
+                  if definitions:
+                      anchor = "u32 ksu_file_sid __read_mostly = 0;\n"
+                      block = "\n".join([
+                          "",
+                          "/* ABK: definitions required by the selected SUSFS SELinux hooks. */",
+                          "#ifdef CONFIG_KSU_SUSFS",
+                          *definitions,
                           "#endif",
                           "",
                       ])
@@ -824,7 +873,9 @@ jobs:
                           selinux_c.write_text(text.replace('#include "selinux_defs.h"\n', '#include "selinux_defs.h"\n' + block, 1))
                       else:
                           raise SystemExit(f"{selinux_c} missing SELinux compatibility insertion anchor")
-                      print("Injected BakaSU SUSFS SELinux hide compatibility globals")
+                      print("Injected missing BakaSU SUSFS SELinux definitions:", ", ".join(missing))
+                  else:
+                      print("BakaSU already provides the definitions required by the selected SUSFS SELinux hooks.")
 
               sucompat_c = kernel_dir / "feature/sucompat.c"
               if sucompat_c.exists():

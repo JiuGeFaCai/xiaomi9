@@ -451,7 +451,9 @@ jobs:
               fi
             fi
 
-           patch -p1 -F 3 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+           SUSFS_PATCH="50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch"
+           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_namespace_patch.py" "$PWD" "$SUSFS_PATCH"
+           patch --batch -p1 -F 3 < "$SUSFS_PATCH"
 
            # Revert
            if [ "$fake_patched" = 1 ]; then

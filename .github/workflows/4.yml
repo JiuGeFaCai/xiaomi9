@@ -470,11 +470,25 @@ jobs:
               KSU_CHECK_ROOT=$(mktemp -d)
               trap 'rm -rf -- "$KSU_CHECK_ROOT"' EXIT
               MATCHED=0
-              # 0a1f3ff 对应 SUSFS 2026-10-15 同步的官方 KSU 基线；旧补丁继续检查旧基线。
-              for COMPAT_REV in 0a1f3ff71719fa2d6ec15f5568dac27fdb957fcc 0ff54fab4e741d958daf3048d7711644c40eca79 87db8315db2c9f5286e47b963ea02b46a88a7e56; do
+              # 从当前所选 SUSFS 的补丁历史发现官方 KSU 基线，再检查已知回退提交。
+              KSU_CANDIDATES_FILE="$KSU_CHECK_ROOT/candidates"
+              python3 "$GITHUB_WORKSPACE/.github/scripts/find_ksu_susfs_candidates.py" \
+                "$GITHUB_WORKSPACE/kernel_workspace/susfs4ksu" > "$KSU_CANDIDATES_FILE"
+              while IFS= read -r COMPAT_REV; do
+                if ! git cat-file -e "${COMPAT_REV}^{commit}" 2>/dev/null; then
+                  echo "从官方 KSU 源获取候选提交: $COMPAT_REV"
+                  if ! git fetch --no-tags https://github.com/tiann/KernelSU.git "$COMPAT_REV"; then
+                    echo "无法获取候选提交，继续检查: $COMPAT_REV"
+                    continue
+                  fi
+                fi
                 git cat-file -e "${COMPAT_REV}^{commit}" 2>/dev/null || continue
+                echo "预检官方 KSU 候选提交: $COMPAT_REV"
                 mkdir "$KSU_CHECK_ROOT/$COMPAT_REV"
-                git archive "$COMPAT_REV" kernel | tar -x -C "$KSU_CHECK_ROOT/$COMPAT_REV"
+                if ! git archive "$COMPAT_REV" kernel | tar -x -C "$KSU_CHECK_ROOT/$COMPAT_REV"; then
+                  echo "无法读取候选提交的 kernel 源码，继续检查: $COMPAT_REV"
+                  continue
+                fi
                 if patch --dry-run --batch --forward --fuzz=0 -p1 -d "$KSU_CHECK_ROOT/$COMPAT_REV" -i "$KSU_PATCH"; then
                   git checkout --detach "$COMPAT_REV"
                   echo "KSU_REF=$COMPAT_REV" >> "$GITHUB_ENV"
@@ -482,7 +496,7 @@ jobs:
                   MATCHED=1
                   break
                 fi
-              done
+              done < "$KSU_CANDIDATES_FILE"
               if [ "$MATCHED" = "0" ]; then
                 echo "❌ 未找到与所选 SUSFS 补丁匹配的官方 KSU 提交"
                 exit 1

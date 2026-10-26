@@ -565,8 +565,8 @@ jobs:
               KSU_CHECK_ROOT=$(mktemp -d)
               trap 'rm -rf -- "$KSU_CHECK_ROOT"' EXIT
               MATCHED=0
-              # 已验证的官方 GKI / OKI SUSFS 补丁基线，按新到旧检查。
-              for COMPAT_REV in 0ff54fab4e741d958daf3048d7711644c40eca79 87db8315db2c9f5286e47b963ea02b46a88a7e56; do
+              # 0a1f3ff 对应 SUSFS 2026-10-15 同步的官方 KSU 基线；旧补丁继续检查旧基线。
+              for COMPAT_REV in 0a1f3ff71719fa2d6ec15f5568dac27fdb957fcc 0ff54fab4e741d958daf3048d7711644c40eca79 87db8315db2c9f5286e47b963ea02b46a88a7e56; do
                 git cat-file -e "${COMPAT_REV}^{commit}" 2>/dev/null || continue
                 mkdir "$KSU_CHECK_ROOT/$COMPAT_REV"
                 git archive "$COMPAT_REV" kernel | tar -x -C "$KSU_CHECK_ROOT/$COMPAT_REV"

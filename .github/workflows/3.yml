@@ -510,6 +510,13 @@ jobs:
           echo "KSUVER=${KSU_VERSION}_${{ matrix.FEIL }}" >> "$GITHUB_ENV"
           echo "官方 KSU + SUSFS 版本号: $KSU_VERSION"
 
+      - name: Guard unsupported SUSFS priority UID calls
+        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_priority_uid.py" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
+
       - name: Apply lz4kd Patches
         run: |
           if [ "${{ matrix.FEIL }}" != "oneplus_sm8750" ]; then

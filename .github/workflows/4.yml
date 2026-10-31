@@ -560,11 +560,12 @@ jobs:
             echo "exec.c 无需修复或已包含 susfs_def.h"
           fi
 
-      # - name: Fix SukiSU SUSFS compatibility
-      #   if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
-      #   run: |
-      #    set -euo pipefail
-      #    python3 "$GITHUB_WORKSPACE/.github/scripts/fix_sukisu_susfs.py" "$GITHUB_WORKSPACE/kernel_workspace"
+      - name: Guard unsupported SUSFS priority UID calls
+        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_priority_uid.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
       
       # - name: Apply HOOK
       #   run: |

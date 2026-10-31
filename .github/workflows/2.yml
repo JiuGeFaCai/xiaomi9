@@ -452,7 +452,10 @@ jobs:
               fi
             fi
 
-           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+           # 适配缺少 blk hook 的 namespace.c，保留 SUSFS 头文件和挂载声明。
+           SUSFS_PATCH="50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch"
+           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_namespace_patch.py" "$PWD" "$SUSFS_PATCH"
+           patch --batch -p1 -F 3 < "$SUSFS_PATCH"
 
            if grep -q 'susfs_is_current_proc_umounted\|SUSFS_IS_INODE_SUS_MAP\|SUSFS_IS_INODE_OPEN_REDIRECT' ./fs/proc/base.c && ! grep -qF '#include <linux/susfs_def.h>' ./fs/proc/base.c; then
              echo "检测到 proc/base.c 缺少 susfs_def.h，注入声明..."

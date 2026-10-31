@@ -374,7 +374,7 @@ jobs:
         if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
         run: |
            cd kernel_workspace
-           if [ "${{ github.event.inputs.CPU }}" = "sm8850" ] || [ "${{ github.event.inputs.CPU }}" = "sm8650" ]; then
+           if [ "${{ github.event.inputs.CPU }}" = "sm8850" ]; then
             git clone -b oki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }} https://github.com/cctv18/susfs4oki.git susfs4ksu
            else
             git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}

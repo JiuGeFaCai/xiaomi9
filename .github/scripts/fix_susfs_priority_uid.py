@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard new SukiSU priority UID calls when the selected SUSFS lacks the API."""
+"""Guard KernelSU priority UID calls when the selected SUSFS lacks the API."""
 
 import argparse
 from pathlib import Path
@@ -81,13 +81,13 @@ def protect(text, pattern):
 def fix(kernel_root):
     ksu_dir = kernel_root / "drivers/kernelsu"
     if not ksu_dir.is_dir():
-        raise SystemExit(f"SukiSU source directory not found: {ksu_dir}")
+        raise SystemExit(f"KernelSU source directory not found: {ksu_dir}")
 
     paths = (ksu_dir / "manager/pkg_observer.c", ksu_dir / "supercall/dispatch.c")
     originals = {path: read_if_exists(path) for path in paths}
     references = re.compile(rf"\b(?:{PARSE}|{SET}|{COMMAND})\b")
     if not any(references.search(c_code(text)) for text in originals.values()):
-        print("SUSFS priority UID: SukiSU has no priority UID calls; no changes needed")
+        print("SUSFS priority UID: KernelSU has no priority UID calls; no changes needed")
         return []
 
     header = without_comments(read_if_exists(kernel_root / "include/linux/susfs.h"))

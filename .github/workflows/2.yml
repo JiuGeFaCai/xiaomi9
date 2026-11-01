@@ -642,7 +642,7 @@ jobs:
           echo "官方 KSU + SUSFS 版本号: $KSU_VERSION"
 
       - name: Guard unsupported SUSFS priority UID calls
-        if: ${{ github.event.inputs.ksu_variant == 'SukiSU' }}
+        if: ${{ env.KSU_ENABLED == 'true' }}
         shell: bash
         run: |
           set -euo pipefail

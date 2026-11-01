@@ -34,16 +34,16 @@ def has_function(text, name, ending):
     return bool(re.search(rf"\b{re.escape(name)}\s*\([^;{{}}]*\)\s*{ending}", text))
 
 
-def requires_command(expression):
+def requires_command(expression, command=COMMAND):
     # Accept positive conjunctions only; an OR or a negated comparison is not a guard.
     expression = re.sub(r"\bdefined\s*\(\s*(\w+)\s*\)", r"\1", expression)
     expression = re.sub(r"\bdefined\s+(\w+)", r"\1", expression)
     terms = [term.replace("(", "").replace(")", "").strip()
              for term in expression.split("&&")]
-    return COMMAND in terms and all(re.fullmatch(r"\w+", term) for term in terms)
+    return command in terms and all(re.fullmatch(r"\w+", term) for term in terms)
 
 
-def guarded(text, offset):
+def guarded(text, offset, command=COMMAND):
     """Recognize existing command guards, including guards around a whole function."""
     stack = []
     for line in without_comments(text[:offset]).splitlines():
@@ -52,11 +52,11 @@ def guarded(text, offset):
             continue
         directive, expression = match.groups()
         if directive in ("ifdef", "ifndef"):
-            is_command = expression.strip() == COMMAND
+            is_command = expression.strip() == command
             stack.append((is_command and directive == "ifdef",
                           is_command and directive == "ifndef"))
         elif directive in ("if", "elif"):
-            inactive = expression.strip() == "0" or requires_command(expression)
+            inactive = expression.strip() == "0" or requires_command(expression, command)
             if directive == "elif" and stack:
                 stack[-1] = (inactive, False)
             elif directive == "if":
@@ -68,13 +68,13 @@ def guarded(text, offset):
     return any(inactive for inactive, _ in stack)
 
 
-def protect(text, pattern):
+def protect(text, pattern, guard=GUARD, command=COMMAND):
     matches = list(re.finditer(pattern, without_comments(text), re.M))
     for match in reversed(matches):
-        if guarded(text, match.start()):
+        if guarded(text, match.start(), command):
             continue
         block = text[match.start():match.end()]
-        text = text[:match.start()] + GUARD + "\n" + block + "#endif\n" + text[match.end():]
+        text = text[:match.start()] + guard + "\n" + block + "#endif\n" + text[match.end():]
     return text
 
 

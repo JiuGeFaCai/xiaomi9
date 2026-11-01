@@ -693,12 +693,13 @@ jobs:
           print("✅ 已修复: " + "; ".join(fixed) if fixed else "✅ 无需修复（6.1+ 内核）")
           PY
 
-      - name: Guard unsupported SUSFS priority UID calls
+      - name: Guard unsupported KernelSU SUSFS calls
         if: ${{ env.KSU_ENABLED == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_priority_uid.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_selinux.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
 
       - name: Fix BakaSU SUSFS compatibility
         if: ${{ github.event.inputs.ksu_variant == 'BakaSU' && env.KSU_SUSFS_ENABLED == 'true' }}

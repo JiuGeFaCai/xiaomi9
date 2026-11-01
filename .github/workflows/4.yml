@@ -560,12 +560,13 @@ jobs:
             echo "exec.c 无需修复或已包含 susfs_def.h"
           fi
 
-      - name: Guard unsupported SUSFS priority UID calls
+      - name: Guard unsupported KernelSU SUSFS calls
         if: ${{ env.KSU_ENABLED == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_priority_uid.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_selinux.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
       
       # - name: Apply HOOK
       #   run: |

@@ -87,7 +87,16 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
+      actions: write
+    # 同一分支、机型串行刷新缓存，避免两次构建互删；不同机型仍可并行。
+    concurrency:
+      group: sm8750-ccache-${{ github.ref }}-${{ matrix.FEIL }}
+      cancel-in-progress: false
     strategy:
+      # 一个机型失败时，不取消其他机型正在进行的缓存刷新。
+      fail-fast: false
       matrix:
         FEIL: ["oneplus_13", "oneplus_13_b", "oneplus_ace5_pro", "oneplus_ace5_pro_b","oneplus_13t", "oneplus_13t_b", "oneplus_pad_2_pro", "oneplus_pad_2_pro_b", "oneplus_ace5_ultra", "oneplus_ace_6"]
             
@@ -143,7 +152,7 @@ jobs:
         id: ccache-restore
         with:
           path: /home/runner/.ccache
-          # 单条模式：固定 key，每个机型只保留一条缓存
+          # 固定 key，每个分支、机型只保留一份；成功后删除旧条目再保存。
           key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}
 
        # 4. 设置 ccache 环境变量
@@ -151,16 +160,16 @@ jobs:
         if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
         run: |
          echo "CCACHE_DIR=/home/runner/.ccache" >> $GITHUB_ENV
-         # 仓库缓存总配额 10GB，matrix 有 10 个机型并行，
-         # 单 job 超过 1G 会导致条目互相 LRU 驱逐、命中率反而下降
-         echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
+         # 默认仓库配额 10GB，10 个机型各 800MB，留出空间余量。
+         export CCACHE_MAXSIZE=800MB
+         echo "CCACHE_MAXSIZE=$CCACHE_MAXSIZE" >> $GITHUB_ENV
          echo "CCACHE_BASEDIR=${{ github.workspace }}" >> $GITHUB_ENV
          echo "CCACHE_LOGFILE=${{ github.workspace }}/ccache.log" >> $GITHUB_ENV
          echo "/usr/lib/ccache" >> $GITHUB_PATH
          mkdir -p /home/runner/.ccache
          export CCACHE_DIR=/home/runner/.ccache
          # 缓存配置失败不应阻塞构建，仅告警（环境变量仍然生效）
-         ccache -M 1G || echo "警告: ccache -M 失败"
+         ccache -M "$CCACHE_MAXSIZE" || echo "警告: ccache -M 失败"
          ccache -o compression=true || echo "警告: 开启压缩失败"
          ccache -o sloppiness="$CCACHE_SLOPPINESS" || echo "警告: sloppiness 设置失败，将仅依赖环境变量"
          echo "缓存恢复结果: cache-hit=${{ steps.ccache-restore.outputs.cache-hit }}"
@@ -685,15 +694,6 @@ jobs:
         if: ${{ always() }}
         run: ccache -sv || ccache -s || true
 
-      # 7. 保存本次编译产生的 ccache（单条模式：缓存条目不可变，
-      #    仅在本次未命中时保存；命中后不再刷新，避免每次新堆一条缓存）
-      - name: Save ccache
-        if: ${{ success() && steps.ccache-restore.outputs.cache-hit != 'true' && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
-        uses: actions/cache/save@v5
-        with:
-          path: /home/runner/.ccache
-          key: ccache-v2-${{ runner.os }}-${{ matrix.FEIL }}
-
       - name: Upload ccache failure log
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
@@ -758,3 +758,23 @@ jobs:
         with:
          name: Image_${{ env.KSUVARIANT }}_${{ env.KSUVER }}
          path: kernel_workspace/kernel_platform/dist/Image
+
+      # 编译、打包和上传产物成功后才刷新，失败的构建保留旧缓存。
+      - name: Prepare ccache refresh
+        if: ${{ success() && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        id: ccache-refresh
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_KEY: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+          CACHE_REF: ${{ github.ref }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/prepare_ccache_refresh.sh"
+
+      - name: Save ccache
+        if: ${{ success() && steps.ccache-refresh.outcome == 'success' && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: /home/runner/.ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}

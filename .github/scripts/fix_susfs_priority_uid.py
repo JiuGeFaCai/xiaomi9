@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard KernelSU priority UID calls when the selected SUSFS lacks the API."""
+"""Guard KernelSU priority UID calls when SUSFS omits or disables the API."""
 
 import argparse
 from pathlib import Path
@@ -9,6 +9,7 @@ import re
 COMMAND = "CMD_SUSFS_SET_PRIORITY_UID_FILTER"
 PARSE = "susfs_parse_priority_app_strings"
 SET = "susfs_set_priority_uid_filter"
+PRIORITY_CONFIG = "CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER"
 GUARD = f"#if defined(CONFIG_KSU_SUSFS) && defined({COMMAND})"
 
 
@@ -32,6 +33,12 @@ def c_code(text):
 
 def has_function(text, name, ending):
     return bool(re.search(rf"\b{re.escape(name)}\s*\([^;{{}}]*\)\s*{ending}", text))
+
+
+def function_requires_priority_config(text, name, ending):
+    pattern = rf"\b{re.escape(name)}\s*\([^;{{}}]*\)\s*{ending}"
+    return any(guarded(text, match.start(), PRIORITY_CONFIG)
+               for match in re.finditer(pattern, text))
 
 
 def requires_command(expression, command=COMMAND):
@@ -96,12 +103,24 @@ def fix(kernel_root):
     has_command = bool(re.search(rf"(?m)^\s*#\s*define\s+{COMMAND}\b", definitions))
     missing = [name for name in (PARSE, SET)
                if not (has_function(header, name, ";") and has_function(implementation, name, r"\{"))]
-    if has_command and not missing:
+    # Newer SUSFS defines the command unconditionally, but its declarations and
+    # implementations require a separate Kconfig option. Textual API presence
+    # cannot ensure that the compiler sees it when this optional feature is off.
+    optional = any(function_requires_priority_config(text, name, ending)
+                   for text, ending in ((header, ";"), (implementation, r"\{"))
+                   for name in (PARSE, SET))
+    if has_command and not missing and not optional:
         print("SUSFS priority UID: selected SUSFS provides the complete API; no changes needed")
         return []
-    if has_command:
+    if has_command and missing:
         raise SystemExit("SUSFS priority UID: command exists but declarations/implementations are "
                          f"incomplete ({', '.join(missing)}); refusing to hide an inconsistent API")
+
+    guard = GUARD
+    required = COMMAND
+    if has_command and optional:
+        guard += f" && defined({PRIORITY_CONFIG})"
+        required = PRIORITY_CONFIG
 
     patterns = (
         rf"^[ \t]*{PARSE}\s*\(\s*\)\s*;[^\n]*\n",
@@ -109,12 +128,12 @@ def fix(kernel_root):
         rf"[ \t]*{SET}\s*\(\s*arg\s*\)\s*;[^\n]*\n"
         r"[ \t]*return\s+0\s*;[^\n]*\n",
     )
-    updated = {path: protect(originals[path], pattern)
+    updated = {path: protect(originals[path], pattern, guard, required)
                for path, pattern in zip(paths, patterns)}
     # Validate every reference before writing either file. Unknown upstream layouts fail early.
     for path, text in updated.items():
         for match in references.finditer(c_code(text)):
-            if not guarded(text, match.start()):
+            if not guarded(text, match.start(), required):
                 raise SystemExit(f"SUSFS priority UID: unsupported unguarded {match.group()} in {path}; "
                                  "upstream layout changed, no files written")
 
@@ -123,7 +142,7 @@ def fix(kernel_root):
         if text != originals[path]:
             path.write_text(text)
             changed.append(path)
-            print(f"SUSFS priority UID: guarded unsupported calls in {path}")
+            print(f"SUSFS priority UID: guarded calls in {path} with {required}")
     if not changed:
         print("SUSFS priority UID: upstream guards already protect unsupported calls; no changes needed")
     return changed

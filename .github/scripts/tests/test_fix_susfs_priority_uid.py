@@ -57,16 +57,19 @@ class PriorityUidTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             return priority.fix(self.root)
 
-    def add_complete_api(self):
+    def add_complete_api(self, optional=False):
         self.definitions.write_text(self.definitions.read_text() +
                                     f"#define {priority.COMMAND} 0x60030\n")
-        self.header.write_text(self.header.read_text() +
-                               f"void {priority.PARSE}(void);\n"
-                               f"void {priority.SET}(void **arg);\n")
-        self.implementation.write_text(
-            f"void {priority.PARSE}(void) {{}}\n"
-            f"void {priority.SET}(void **arg) {{}}\n",
-        )
+        declarations = (f"void {priority.PARSE}(void);\n"
+                        f"void {priority.SET}(void **arg);\n")
+        definitions = (f"void {priority.PARSE}(void) {{}}\n"
+                       f"void {priority.SET}(void **arg) {{}}\n")
+        if optional:
+            opening = "#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n"
+            declarations = opening + declarations + "#endif\n"
+            definitions = opening + definitions + "#endif\n"
+        self.header.write_text(self.header.read_text() + declarations)
+        self.implementation.write_text(definitions)
 
     def test_old_susfs_is_guarded_and_a_second_run_is_unchanged(self):
         self.assertEqual(set(self.fix()), {self.observer, self.dispatch})
@@ -80,6 +83,68 @@ class PriorityUidTest(unittest.TestCase):
         self.assertEqual(self.fix(), [])
         self.assertEqual(self.observer.read_text(), OBSERVER)
         self.assertEqual(self.dispatch.read_text(), DISPATCH)
+
+    def test_optional_api_with_a_defined_command_is_guarded_and_idempotent(self):
+        self.add_complete_api(optional=True)
+        providers = (self.header.read_bytes(), self.implementation.read_bytes())
+        self.assertEqual(set(self.fix()), {self.observer, self.dispatch})
+        for path in (self.observer, self.dispatch):
+            self.assertIn("defined(CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER)", path.read_text())
+        fixed = (self.observer.read_bytes(), self.dispatch.read_bytes())
+        self.assertEqual(self.fix(), [])
+        self.assertEqual(fixed, (self.observer.read_bytes(), self.dispatch.read_bytes()))
+        self.assertEqual(providers, (self.header.read_bytes(), self.implementation.read_bytes()))
+
+    def test_upstream_feature_guards_are_not_duplicated(self):
+        self.add_complete_api(optional=True)
+        opening = "#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n"
+        self.observer.write_text(opening + OBSERVER + "#endif\n")
+        self.dispatch.write_text(opening + DISPATCH + "#endif\n")
+        originals = (self.observer.read_bytes(), self.dispatch.read_bytes())
+        self.assertEqual(self.fix(), [])
+        self.assertEqual(originals, (self.observer.read_bytes(), self.dispatch.read_bytes()))
+
+    def test_command_guards_do_not_protect_a_disabled_optional_api(self):
+        self.add_complete_api(optional=True)
+        opening = f"#ifdef {priority.COMMAND}\n"
+        self.observer.write_text(opening + OBSERVER + "#endif\n")
+        self.dispatch.write_text(opening + DISPATCH + "#endif\n")
+        self.assertEqual(len(self.fix()), 2)
+        for path in (self.observer, self.dispatch):
+            self.assertIn("defined(CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER)", path.read_text())
+        self.assertEqual(self.fix(), [])
+
+    def test_a_feature_guard_on_either_provider_requires_guarded_calls(self):
+        for guarded_provider in (self.header, self.implementation):
+            with self.subTest(provider=guarded_provider):
+                self.observer.write_text(OBSERVER)
+                self.dispatch.write_text(DISPATCH)
+                self.definitions.write_text("#define CMD_EXISTING 1\n")
+                self.header.write_text("")
+                self.add_complete_api()
+                guarded_provider.write_text(
+                    "#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n" +
+                    guarded_provider.read_text() + "#endif\n",
+                )
+                self.assertEqual(len(self.fix()), 2)
+
+    def test_unrelated_feature_guards_do_not_disable_an_unconditional_api(self):
+        self.add_complete_api()
+        for path in (self.header, self.implementation):
+            path.write_text("#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n"
+                            "/* unrelated optional code */\n#endif\n" + path.read_text())
+        self.assertEqual(self.fix(), [])
+        self.assertEqual(self.observer.read_text(), OBSERVER)
+        self.assertEqual(self.dispatch.read_text(), DISPATCH)
+
+    def test_optional_api_with_changed_call_layout_fails_without_partial_edits(self):
+        self.add_complete_api(optional=True)
+        changed_dispatch = DISPATCH.replace("(arg);", "(different_arg);")
+        self.dispatch.write_text(changed_dispatch)
+        with self.assertRaisesRegex(SystemExit, "no files written"):
+            self.fix()
+        self.assertEqual(self.observer.read_text(), OBSERVER)
+        self.assertEqual(self.dispatch.read_text(), changed_dispatch)
 
     def test_upstream_guards_are_not_duplicated(self):
         self.observer.write_text(OBSERVER.replace(
@@ -159,6 +224,50 @@ class PriorityUidTest(unittest.TestCase):
         )
         self.assertIn("susfs_parse_priority_app_strings();", expanded)
         self.assertIn("susfs_set_priority_uid_filter(arg);", expanded)
+
+    def test_clang_reproduces_config_disabled_failure_then_links_both_modes(self):
+        compiler = shutil.which("clang")
+        if not compiler:
+            self.skipTest("clang is not installed")
+        self.add_complete_api(optional=True)
+        unit = self.root / "unity.c"
+        unit.write_text(
+            '#include "include/linux/susfs_def.h"\n'
+            '#include "include/linux/susfs.h"\n'
+            '#include "drivers/kernelsu/manager/pkg_observer.c"\n'
+            '#include "drivers/kernelsu/supercall/dispatch.c"\n'
+            'int main(void)\n{\n'
+            '    void *arg = 0;\n'
+            '    observe();\n'
+            '    if (dispatch(CMD_EXISTING, &arg) != 7) return 1;\n'
+            '#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER\n'
+            '    return dispatch(CMD_SUSFS_SET_PRIORITY_UID_FILTER, &arg) != 0;\n'
+            '#else\n'
+            '    return dispatch(CMD_SUSFS_SET_PRIORITY_UID_FILTER, &arg) != -22;\n'
+            '#endif\n}\n',
+        )
+        executable = self.root / "priority-test"
+        flags = [compiler, "-std=gnu11", "-Werror=implicit-function-declaration",
+                 "-DCONFIG_KSU_SUSFS", str(unit), str(self.implementation),
+                 "-o", str(executable)]
+        before = subprocess.run(flags, capture_output=True, text=True)
+        self.assertNotEqual(before.returncode, 0)
+        for name in (priority.PARSE, priority.SET):
+            self.assertIn(f"'{name}'", before.stderr)
+        self.fix()
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                config = ["-DCONFIG_KSU_SUSFS_PRIORITY_UID_FILTER"] if enabled else []
+                result = subprocess.run(flags + config, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                subprocess.run([str(executable)], check=True)
+                expanded = subprocess.check_output(
+                    [compiler, "-E", "-P", "-DCONFIG_KSU_SUSFS", *config, str(unit)],
+                    text=True,
+                )
+                for call in ("susfs_parse_priority_app_strings();",
+                             "susfs_set_priority_uid_filter(arg);"):
+                    self.assertEqual(call in expanded, enabled)
 
 
 if __name__ == "__main__":

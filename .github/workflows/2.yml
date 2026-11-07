@@ -641,6 +641,13 @@ jobs:
           echo "KSUVER=${KSU_VERSION}" >> "$GITHUB_ENV"
           echo "官方 KSU + SUSFS 版本号: $KSU_VERSION"
 
+      - name: Fix optional SUSFS credential helpers
+        if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_unused_helpers.py" "$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/common"
+
       - name: Guard unsupported KernelSU SUSFS calls
         if: ${{ env.KSU_ENABLED == 'true' }}
         shell: bash

@@ -693,6 +693,13 @@ jobs:
           print("✅ 已修复: " + "; ".join(fixed) if fixed else "✅ 无需修复（6.1+ 内核）")
           PY
 
+      - name: Fix optional SUSFS credential helpers
+        if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_unused_helpers.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
+
       - name: Guard unsupported KernelSU SUSFS calls
         if: ${{ env.KSU_ENABLED == 'true' }}
         shell: bash

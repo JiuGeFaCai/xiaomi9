@@ -163,21 +163,28 @@ jobs:
 
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
 
-      - name: Fix vm_flags_clear for android13 5.15.167
+      - name: Fix missing vm_flags_clear for VMA padding
         working-directory: kernel_workspace/common
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android13" ] && \
-             [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.15" ] && \
-             grep -qF 'vm_flags_clear(new_vma, VM_PAD_MASK);' ./mm/mmap.c && \
-             ! grep -qF 'static inline void vm_flags_clear(' ./include/linux/mm.h; then
-            python3 - <<'PY'
+          # Older GKI branches can backport VMA padding without vm_flags_clear().
+          # Check the source, since this also affects builds without KernelSU/SUSFS.
+          python3 - <<'PY'
           from pathlib import Path
+          import re
 
+          call = r"\bvm_flags_clear\s*\("
           path = Path("include/linux/mm.h")
           text = path.read_text()
+          if not re.search(call, Path("mm/mmap.c").read_text()):
+              print("mm/mmap.c 未调用 vm_flags_clear，无需修复")
+              raise SystemExit(0)
+          if re.search(call, text):
+              print("include/linux/mm.h 已提供 vm_flags_clear，无需修复")
+              raise SystemExit(0)
+
           helper = """\
           static inline void vm_flags_clear(struct vm_area_struct *vma,
                                             vm_flags_t flags)
@@ -187,20 +194,16 @@ jobs:
 
           """
 
-          if "static inline void vm_flags_clear(" not in text:
-              marker = "/*\n * Use only if VMA is not part of the VMA tree"
+          for marker in ("/*\n * Use only if VMA is not part of the VMA tree",
+                         "#endif /* __KERNEL__ */", "#endif /* _LINUX_MM_H */"):
               if marker in text:
                   text = text.replace(marker, helper + marker, 1)
-              elif "#endif /* _LINUX_MM_H */" in text:
-                  text = text.replace("#endif /* _LINUX_MM_H */", helper + "#endif /* _LINUX_MM_H */", 1)
-              else:
-                  raise SystemExit("include/linux/mm.h missing insertion anchor for vm_flags_clear()")
-              path.write_text(text)
+                  break
+          else:
+              raise SystemExit("include/linux/mm.h missing insertion anchor for vm_flags_clear()")
+          path.write_text(text)
+          print("已补充缺失的 vm_flags_clear helper（VMA padding 兼容修复）")
           PY
-            echo "已为 android13-5.15 补充 vm_flags_clear helper"
-          else
-            echo "无需补充 vm_flags_clear helper"
-          fi
          
          
          

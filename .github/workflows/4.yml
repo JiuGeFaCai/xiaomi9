@@ -927,7 +927,7 @@ jobs:
          rm -rf drivers/device_check/.git
          git add -A && git commit -a -m "BUILD Kernel"
          cd ..
-         tools/bazel run --config=fast --config=stamp //common:kernel_aarch64_dist  -- --destdir=dist
+         tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist  -- --destdir=dist
 
       - name: Make AnyKernel3
         run: |

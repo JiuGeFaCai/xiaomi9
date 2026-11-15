@@ -1070,8 +1070,9 @@ jobs:
           if [ "$KSU_ENABLED" = "true" ]; then
             echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
           else
+            # Without KernelSU these symbols do not exist; savedefconfig drops
+            # even "is not set" entries, which breaks Kleaf's defconfig check.
             sed -i -E '/^(CONFIG_KSU(_[A-Z0-9_]+)?=|# CONFIG_KSU(_[A-Z0-9_]+)? is not set)/d' "$CONFIG_FILE"
-            echo "# CONFIG_KSU is not set" >> "$CONFIG_FILE"
           fi
 
           # KPM配置
@@ -1080,7 +1081,7 @@ jobs:
           sed -i -E '/^(CONFIG_KPM=|# CONFIG_KPM is not set)/d' "$CONFIG_FILE"
           if [ "$KPM_ENABLE" = "builtin" ] && [ "$KSU_ENABLED" = "true" ]; then
             echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
-          else
+          elif [ "$KSU_ENABLED" = "true" ]; then
             echo "# CONFIG_KPM is not set" >> "$CONFIG_FILE"
           fi
 
@@ -1104,7 +1105,9 @@ jobs:
             echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
           else
             sed -i -E '/^(CONFIG_KSU_SUSFS(_[A-Z0-9_]+)?=|# CONFIG_KSU_SUSFS(_[A-Z0-9_]+)? is not set)/d' "$CONFIG_FILE"
-            echo "# CONFIG_KSU_SUSFS is not set" >> "$CONFIG_FILE"
+            if [ "$KSU_ENABLED" = "true" ]; then
+              echo "# CONFIG_KSU_SUSFS is not set" >> "$CONFIG_FILE"
+            fi
           fi
 
 

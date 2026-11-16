@@ -1070,9 +1070,8 @@ jobs:
           if [ "$KSU_ENABLED" = "true" ]; then
             echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
           else
-            # Without KernelSU these symbols do not exist; savedefconfig drops
-            # even "is not set" entries, which breaks Kleaf's defconfig check.
             sed -i -E '/^(CONFIG_KSU(_[A-Z0-9_]+)?=|# CONFIG_KSU(_[A-Z0-9_]+)? is not set)/d' "$CONFIG_FILE"
+            echo "# CONFIG_KSU is not set" >> "$CONFIG_FILE"
           fi
 
           # KPM配置
@@ -1081,7 +1080,7 @@ jobs:
           sed -i -E '/^(CONFIG_KPM=|# CONFIG_KPM is not set)/d' "$CONFIG_FILE"
           if [ "$KPM_ENABLE" = "builtin" ] && [ "$KSU_ENABLED" = "true" ]; then
             echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
-          elif [ "$KSU_ENABLED" = "true" ]; then
+          else
             echo "# CONFIG_KPM is not set" >> "$CONFIG_FILE"
           fi
 
@@ -1105,9 +1104,7 @@ jobs:
             echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
           else
             sed -i -E '/^(CONFIG_KSU_SUSFS(_[A-Z0-9_]+)?=|# CONFIG_KSU_SUSFS(_[A-Z0-9_]+)? is not set)/d' "$CONFIG_FILE"
-            if [ "$KSU_ENABLED" = "true" ]; then
-              echo "# CONFIG_KSU_SUSFS is not set" >> "$CONFIG_FILE"
-            fi
+            echo "# CONFIG_KSU_SUSFS is not set" >> "$CONFIG_FILE"
           fi
 
 
@@ -1126,11 +1123,6 @@ jobs:
           cd common
           if [ -f "BUILD.bazel" ]; then
           sed -i '/"protected_exports_list": "android\/abi_gki_protected_exports_aarch64"/d' BUILD.bazel
-          fi
-          if grep -q 'protected_module_names_list' BUILD.bazel 2>/dev/null; then
-          sed -i '/protected_module_names_list.*gki_aarch64_protected_module_names/d' BUILD.bazel
-          else
-          echo "No protected_module_names_list found"
           fi
           git add -A && git commit -a -m "BUILD Kernel"
 
@@ -1252,13 +1244,8 @@ jobs:
          if [ -e build/build.sh ]; then
            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
          else
-           if grep -q "pkg_install" common/BUILD.bazel; then
-           DIST_ARG="--destdir=dist"
-           else
-           DIST_ARG="--dist_dir=dist"
-           fi
-           tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
-           fi
+           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+         fi
 
       - name: Make AnyKernel3
         run: |

@@ -1133,9 +1133,11 @@ jobs:
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
+          
           if [ -f "BUILD.bazel" ]; then
           sed -i '/"protected_exports_list": "android\/abi_gki_protected_exports_aarch64"/d' BUILD.bazel
           fi
+          
           if grep -q 'protected_module_names_list' BUILD.bazel 2>/dev/null; then
           sed -i '/protected_module_names_list.*gki_aarch64_protected_module_names/d' BUILD.bazel
           else

@@ -1257,7 +1257,7 @@ jobs:
            else
            DIST_ARG="--dist_dir=dist"
            fi
-           tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
+           tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
            fi
 
       - name: Make AnyKernel3

@@ -984,31 +984,22 @@ jobs:
          patch -p1 -F 3 < lsm.patch
 
       - name: Kernel Version Handling
-        shell: bash
-        env:
-          ANDROID_VERSION_INPUT: ${{ github.event.inputs.ANDROID_VERSION }}
-          KERNEL_VERSION_INPUT: ${{ github.event.inputs.KERNEL_VERSION }}
         run: |
-          set -euo pipefail
           cd kernel_workspace
           # 获取内核 Android 版本号(KANDROID_VERSION)以及内核版本号(KERNEL_VERSION)
-          # New branches link build.config.constants to a Starlark file, where
-          # BRANCH is quoted. Read the literal value without sourcing the file.
-          BRANCH=
           for f in ./common/build.config.constants ./common/build.config.common; do
             if [ -f "$f" ]; then
-              BRANCH=$(sed -nE "s/^[[:space:]]*BRANCH[[:space:]]*=[[:space:]]*['\"]?(android[0-9]+-[0-9]+\.[0-9]+)['\"]?[[:space:]]*(#.*)?$/\1/p" "$f" | head -n 1)
+              BRANCH=$(grep -m1 '^BRANCH=' "$f" | cut -d= -f2)
               [ -n "$BRANCH" ] && break
             fi
           done
 
-          BRANCH="${BRANCH:-${ANDROID_VERSION_INPUT}-${KERNEL_VERSION_INPUT}}"
-          if [[ ! "$BRANCH" =~ ^android[0-9]+-[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid kernel branch: $BRANCH" >&2
-            exit 1
+          if [ -n "$BRANCH" ]; then
+            echo "KANDROID_VERSION=${BRANCH%-*}" >> $GITHUB_ENV
+            echo "KERNEL_VERSION=${BRANCH#*-}" >> $GITHUB_ENV
+          else
+            echo "No BRANCH found in build.config files"
           fi
-          echo "KANDROID_VERSION=${BRANCH%-*}" >> "$GITHUB_ENV"
-          echo "KERNEL_VERSION=${BRANCH#*-}" >> "$GITHUB_ENV"
 
           # 从 Makefile 获取完整内核版本号(TKERNEL_VERSION)以及可选的修改内核等级
           ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
@@ -1160,8 +1151,30 @@ jobs:
             "$KANDROID_VERSION"|"$KANDROID_VERSION"-*) LOCALVER="-$SUFFIX" ;;
             *)                                         LOCALVER="-${KANDROID_VERSION}-${SUFFIX}" ;;
           esac
-          python3 "$GITHUB_WORKSPACE/.github/scripts/set_kernel_suffix.py" \
-            "$GITHUB_WORKSPACE/kernel_workspace/common" --suffix="$LOCALVER"
+          # 转义 sed 替换串中的特殊字符（\ & |）
+          LOCALVER_ESC=$(printf '%s' "$LOCALVER" | sed -e 's/[\\&|]/\\&/g')
+
+          # 只改 common：决定 KERNELRELEASE 的只有这一个，external/dtc 只影响 dtc 工具版本
+          for f in ./common/scripts/setlocalversion; do
+            [ -f "$f" ] || continue
+            echo "Modifying: $f"
+
+            # 移除 -dirty
+            sed -i 's/ -dirty//g' "$f"
+            sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
+
+            if grep -q 'KERNELVERSION.*scm_version' "$f"; then
+              echo "Detected NEW setlocalversion format"
+              sed -i "s|echo \"\${KERNELVERSION}.*scm_version}\"|echo \"\${KERNELVERSION}${LOCALVER_ESC}\"|" "$f"
+            elif grep -q 'echo "\$res"' "$f"; then
+              echo "Detected OLD setlocalversion format"
+              sed -i "s|^res=.*|res=\"${LOCALVER_ESC}\"|" "$f"
+            else
+              echo "Unknown format, appending echo manually"
+              echo "echo \"\$res${LOCALVER}\"" >> "$f"
+            fi
+            chmod +x "$f"
+          done
           echo "内核后缀: ${LOCALVER}"
 
       # 伪官方格式的随机后缀（仅在 KERNEL_NAME 留空时生效）
@@ -1179,8 +1192,26 @@ jobs:
           RANDOM_HASH=$(od -An -N7 -tx1 /dev/urandom | tr -d ' \n')
           RANDOM_SUFFIX="${RANDOM_DIGIT}-o-g${RANDOM_HASH}"
 
-          python3 "$GITHUB_WORKSPACE/.github/scripts/set_kernel_suffix.py" \
-            "$GITHUB_WORKSPACE/kernel_workspace/common" --suffix="-${KANDROID_VERSION}-${RANDOM_SUFFIX}"
+          for f in ./common/scripts/setlocalversion; do
+            [ -f "$f" ] || continue
+            echo "Modifying: $f"
+
+            # 移除 -dirty
+            sed -i 's/ -dirty//g' "$f"
+            sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
+
+            if grep -q 'KERNELVERSION.*scm_version' "$f"; then
+              echo "Detected NEW setlocalversion format"
+              sed -i "s|echo \"\${KERNELVERSION}.*scm_version}\"|echo \"\${KERNELVERSION}-${KANDROID_VERSION}-${RANDOM_SUFFIX}\"|" "$f"
+            elif grep -q 'echo "\$res"' "$f"; then
+              echo "Detected OLD setlocalversion format"
+              sed -i "s/^res=.*/res=\"-${KANDROID_VERSION}-${RANDOM_SUFFIX}\"/" "$f"
+            else
+              echo "Unknown format, appending echo manually"
+              echo "echo \"\$res-${RANDOM_SUFFIX}\"" >> "$f"
+            fi
+            chmod +x "$f"
+          done
           echo "内核后缀(随机): -${KANDROID_VERSION}-${RANDOM_SUFFIX}"
 
       - name: 修复 glibc 2.38 兼容性
@@ -1226,7 +1257,7 @@ jobs:
            else
            DIST_ARG="--dist_dir=dist"
            fi
-           tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- "$DIST_ARG"
+           tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
            fi
 
       - name: Make AnyKernel3

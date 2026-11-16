@@ -1083,10 +1083,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          KERNEL_PATCHES="$GITHUB_WORKSPACE/kernel_workspace/kernel_patches"
-          if [ ! -d "$KERNEL_PATCHES" ]; then
-            git clone --depth=1 https://github.com/WildKernels/kernel_patches.git "$KERNEL_PATCHES"
-          fi
+          KERNEL_PATCHES="$GITHUB_WORKSPACE/kernel_patches"
 
           ensure_line_once() {
             local file="$1"

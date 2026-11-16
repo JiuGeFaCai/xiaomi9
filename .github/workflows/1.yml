@@ -66,6 +66,11 @@ on:
         required: false
         default: false
         type: boolean
+      enable_wifi_bluetooth_fix:
+        description: "是否启用 6.6 WiFi/蓝牙兼容性修复（三星 + 小米）"
+        required: false
+        default: false
+        type: boolean
       enable_oneplus:
         description: "是否启用一加开机补丁"
         required: false
@@ -1071,6 +1076,60 @@ jobs:
           patch -p1 -F 3 < "${PATCH_DIR}/lz4k_oplus.patch" || true
           echo 'lz4k_oplus_patch完成'
          
+      - name: 修复 6.6 WiFi/蓝牙兼容性（三星 + 小米）
+        if: ${{ inputs.enable_wifi_bluetooth_fix && env.KERNEL_VERSION == '6.6' }}
+        working-directory: kernel_workspace/common
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          KERNEL_PATCHES="$GITHUB_WORKSPACE/kernel_workspace/kernel_patches"
+          if [ ! -d "$KERNEL_PATCHES" ]; then
+            git clone --depth=1 https://github.com/WildKernels/kernel_patches.git "$KERNEL_PATCHES"
+          fi
+
+          ensure_line_once() {
+            local file="$1"
+            local line="$2"
+            if [ ! -f "$file" ]; then
+              echo "::error::文件不存在: $file"
+              exit 1
+            fi
+            if ! grep -qF "$line" "$file"; then
+              echo "$line" >> "$file"
+            fi
+          }
+
+          GALAXY_SYMBOL_LIST="android/abi_gki_aarch64_galaxy"
+          XIAOMI_SYMBOL_LIST="android/abi_gki_aarch64_xiaomi"
+          DRIVERS_MAKEFILE="drivers/Makefile"
+          MIN_KDP_SRC="$KERNEL_PATCHES/samsung/min_kdp/min_kdp.c"
+          MIN_KDP_PATCH="$KERNEL_PATCHES/samsung/min_kdp/add-min_kdp-symbols.patch"
+          MIN_KDP_DST="drivers/min_kdp.c"
+
+          ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_set_cred_non_rcu"
+          ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_usecount_dec_and_test"
+          ensure_line_once "$GALAXY_SYMBOL_LIST" "kdp_usecount_inc"
+
+          if [ ! -f "$MIN_KDP_PATCH" ]; then
+            echo "::error::补丁不存在: $MIN_KDP_PATCH"
+            exit 1
+          fi
+          if patch -p1 --dry-run < "$MIN_KDP_PATCH" >/dev/null 2>&1; then
+            patch -p1 --no-backup-if-mismatch < "$MIN_KDP_PATCH"
+          else
+            echo "min_kdp symbols patch 已应用或当前上下文不匹配，跳过。"
+          fi
+
+          if [ ! -f "$MIN_KDP_SRC" ]; then
+            echo "::error::文件不存在: $MIN_KDP_SRC"
+            exit 1
+          fi
+          cp "$MIN_KDP_SRC" "$MIN_KDP_DST"
+          ensure_line_once "$DRIVERS_MAKEFILE" "obj-y += min_kdp.o"
+
+          ensure_line_once "$XIAOMI_SYMBOL_LIST" "device_find_any_child"
+
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace

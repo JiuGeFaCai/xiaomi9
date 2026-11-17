@@ -1192,11 +1192,13 @@ jobs:
           if [ -f "BUILD.bazel" ]; then
           sed -i '/"protected_exports_list": "android\/abi_gki_protected_exports_aarch64"/d' BUILD.bazel
           fi
+          
           if grep -q 'protected_module_names_list' BUILD.bazel 2>/dev/null; then
           sed -i '/protected_module_names_list.*gki_aarch64_protected_module_names/d' BUILD.bazel
           else
           echo "No protected_module_names_list found"
           fi
+          
           git add -A && git commit -a -m "BUILD Kernel"
 
       # 自定义内核后缀（GKI 结构：kernel_workspace/common）

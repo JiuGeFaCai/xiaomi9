@@ -6,9 +6,9 @@ on:
         type: choice
         description: "RUN"
         required: true
-        default: ubuntu-latest
+        default: ubuntu-24.04
         options:
-          - ubuntu-latest
+          - ubuntu-24.04
           - self-hosted
       ksu_variant:
         description: "KernelSU 变体（ksunext=Next，ksu=官方，none=不集成）"
@@ -113,7 +113,7 @@ jobs:
       TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
     steps:
       - name: Ensure 4 GiB swap
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,19 +135,19 @@ jobs:
         uses: actions/checkout@v4
           
       - name: Configure Git
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         run: |
          git config --global user.name "build"
          git config --global user.email "123456@cnm.com"
 
       - name: Install dependencies
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         run: |
          sudo apt update
          sudo apt install -y python3 ccache libelf-dev dos2unix
 
       - name: Restore ccache
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         uses: actions/cache/restore@v5
         id: ccache-restore
         with:
@@ -157,7 +157,7 @@ jobs:
 
        # 4. 设置 ccache 环境变量
       - name: Setup ccache environment
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         run: |
          echo "CCACHE_DIR=/home/runner/.ccache" >> $GITHUB_ENV
          # 默认仓库配额 10GB，10 个机型各 800MB，留出空间余量。
@@ -180,7 +180,7 @@ jobs:
          ccache -s || true
 
       - name: Install repo tool
-        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         run: |
          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
          chmod a+x ~/repo
@@ -768,7 +768,7 @@ jobs:
 
       # 编译、打包和上传产物成功后才刷新，失败的构建保留旧缓存。
       - name: Prepare ccache refresh
-        if: ${{ success() && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ success() && github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         id: ccache-refresh
         continue-on-error: true
         shell: bash
@@ -779,7 +779,7 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/.github/scripts/prepare_ccache_refresh.sh"
 
       - name: Save ccache
-        if: ${{ success() && steps.ccache-refresh.outcome == 'success' && github.event.inputs.BUILD_RUN == 'ubuntu-latest' }}
+        if: ${{ success() && steps.ccache-refresh.outcome == 'success' && github.event.inputs.BUILD_RUN == 'ubuntu-24.04' }}
         continue-on-error: true
         uses: actions/cache/save@v5
         with:

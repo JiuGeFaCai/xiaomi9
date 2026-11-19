@@ -11,7 +11,7 @@ on:
           - ubuntu-24.04
           - self-hosted
       ksu_variant:
-        description: "KernelSU 变体（ksunext=Next，ksu=官方，none=不集成）"
+        description: "KernelSU 变体（SukiSU=Nova/旧版 Ultra，ksunext=Next，ksu=官方，none=不集成）"
         type: choice
         options:
           - SukiSU
@@ -25,7 +25,7 @@ on:
         required: false
         default: ""
       ksu_version_override:
-        description: "锁定 KSU 版本号(留空=上游默认。SukiSU 默认会联网取上游 main 提交数，与所选 commit 无关，需要对齐管理器版本时在此填数字，如 40819)"
+        description: "锁定 KSU 数字版本号（留空按所选源码的上游规则计算；SukiSU Nova/Ultra 自动识别，内核与产物同步）"
         required: false
         default: ""
       kpm_enable:
@@ -67,7 +67,7 @@ on:
         default: false
         type: boolean
       sukisu_tag:
-        description: "自定义版本来源后缀"
+        description: "SukiSU 完整版本来源后缀（附加到 @分支 后）"
         required: false
         default: "闲鱼-搞机英雄-禁止黑灰违法犯罪倒卖"
       enable_susfs:
@@ -259,7 +259,7 @@ jobs:
               KSU_DIR=KernelSU
               KSU_NAME=SukiSU
               echo "添加 SukiSU..."
-              curl -fLSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s -- "$KSU_REF"
+              curl -fLSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/main/kernel/setup.sh" | bash -s -- "$KSU_REF"
               ;;
             "BakaSU")
               KSU_DIR=KernelSU
@@ -300,7 +300,17 @@ jobs:
           fi
 
           case "$KSU_VARIANT" in
-            "SukiSU") KSU_VERSION=$(expr "$(git rev-list --count main)" + 37185) ;;
+            "SukiSU")
+              # 读取所选 Nova/Ultra 的实际 Make 版本规则，同步数字版本和自定义后缀。
+              python3 "$GITHUB_WORKSPACE/.github/scripts/set_sukisu_version.py" \
+                "$PWD" --ref "$KSU_REF" --version "$KSU_VER_OVERRIDE" --suffix "${TAG_SUFFIX_IN:-}" \
+                > "$RUNNER_TEMP/sukisu-version.txt"
+              mapfile -t SUKISU_METADATA < "$RUNNER_TEMP/sukisu-version.txt"
+              KSU_NAME="${SUKISU_METADATA[0]}"
+              KSU_VERSION="${SUKISU_METADATA[1]}"
+              echo "KernelSU full version: ${SUKISU_METADATA[2]}"
+              echo "KSU_VERSION_FULL=${SUKISU_METADATA[2]}" >> "$GITHUB_ENV"
+              ;;
             "BakaSU") KSU_VERSION=$(expr "$(git rev-list --count HEAD)" + 30700) ;;
             "ksunext")
               # 与 pershoot 的 Kbuild 一致，dev-susfs 按 origin/dev 的共同祖先计数。
@@ -312,6 +322,10 @@ jobs:
           esac
           [ -z "$KSU_VER_OVERRIDE" ] || KSU_VERSION="$KSU_VER_OVERRIDE"
           KSU_VERSION_TO_PATCH="$KSU_VER_OVERRIDE"
+          # SukiSU 已由脚本同步，其他变体继续使用原有覆盖流程。
+          if [ "$KSU_VARIANT" = "SukiSU" ]; then
+            KSU_VERSION_TO_PATCH=""
+          fi
           if [ "$KSU_VARIANT" = "ksunext" ] || [ "$KSU_VARIANT" = "ksu" ]; then
             KSU_VERSION_TO_PATCH="$KSU_VERSION"
           fi

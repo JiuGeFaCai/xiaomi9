@@ -277,7 +277,7 @@ jobs:
               KSU_DIR=KernelSU
               KSU_NAME=SukiSU
               echo "添加 SukiSU..."
-              curl -fLSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/main/kernel/setup.sh" | bash -s -- "$KSU_REF"
+              curl -fLSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/builtin/kernel/setup.sh" | bash -s -- "$KSU_REF"
               ;;
             "BakaSU")
               KSU_DIR=KernelSU

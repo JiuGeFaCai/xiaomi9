@@ -216,6 +216,7 @@ jobs:
       - name: Set up KernelSU
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           KSU_REF_IN: ${{ github.event.inputs.sukisu_version }}
           KSU_VER_OVERRIDE_IN: ${{ github.event.inputs.ksu_version_override }}
           TAG_SUFFIX_IN: ${{ github.event.inputs.sukisu_tag }}
@@ -305,12 +306,16 @@ jobs:
 
               # 从官方 Release APK 提取签名，加入 FinaSU 管理器第二信任槽。
               FINASU_TEMP=$(mktemp -d "$RUNNER_TEMP/finasu.XXXXXX")
+              echo "获取 FinaSU Release 信息（GitHub API 认证请求）..."
               curl -fLSs --retry 3 --max-time 60 \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
                 https://api.github.com/repos/LyraVoid/FinaSU/releases/latest \
                 -o "$FINASU_TEMP/release.json"
               FINASU_APK_URL=$(python3 -c \
                 'import json,sys; d=json.load(open(sys.argv[1])); print(next(a["browser_download_url"] for a in d.get("assets", []) if a["name"].endswith(".apk")))' \
                 "$FINASU_TEMP/release.json")
+              echo "下载 FinaSU 官方管理器 APK..."
               curl -fLSs --retry 3 --max-time 300 -o "$FINASU_TEMP/manager.apk" "$FINASU_APK_URL"
               CERT_INFO=$(python3 "$GITHUB_WORKSPACE/.github/scripts/extract_finasu_manager_cert.py" "$FINASU_TEMP/manager.apk")
               read -r KSU_CERT_SIZE KSU_CERT_HASH <<< "$CERT_INFO"

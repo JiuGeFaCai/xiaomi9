@@ -15,17 +15,18 @@ on:
         required: true
         default: '6.1'
       ksu_variant:
-        description: "KernelSU 变体（SukiSU=Nova/旧版 Ultra，ksunext=Next，ksu=官方，none=不集成）"
+        description: "KernelSU 变体（SukiSU=Nova/旧版 Ultra，FinaSU，ksunext=Next，ksu=官方，none=不集成）"
         type: choice
         options:
           - SukiSU
           - BakaSU
+          - FinaSU
           - ksunext
           - ksu
           - none
         default: BakaSU
       sukisu_version:
-        description: "KSU 分支/标签/提交（留空自动；SukiSU 用 builtin；Next 用 dev-susfs；ksu+SUSFS 可匹配兼容提交；none 忽略）"
+        description: "KSU 分支/标签/提交（留空自动；SukiSU 用 builtin；FinaSU 用 master；Next 用 dev-susfs；ksu+SUSFS 可匹配兼容提交；none 忽略）"
         required: false
         default: ""
       ksu_version_override:
@@ -253,6 +254,8 @@ jobs:
           if [ -z "$KSU_REF" ]; then
             if [ "$KSU_VARIANT" = "SukiSU" ]; then
               KSU_REF=builtin
+            elif [ "$KSU_VARIANT" = "FinaSU" ]; then
+              KSU_REF=master
             elif [ "$KSU_VARIANT" = "ksunext" ]; then
               KSU_REF=dev-susfs
             else
@@ -284,6 +287,52 @@ jobs:
               KSU_NAME=BakaSU
               echo "添加 BakaSU..."
               curl -fLSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s -- "$KSU_REF"
+              ;;
+            "FinaSU")
+              KSU_DIR=KernelSU
+              KSU_NAME=FinaSU
+              echo "添加 FinaSU..."
+              # 按参考工作流手动挂载，复用现有 KernelSU 目录布局。
+              git clone https://github.com/LyraVoid/FinaSU.git "$KSU_DIR"
+              git -C "$KSU_DIR" checkout "$KSU_REF"
+              DRIVER_DIR="$PWD/common/drivers"
+              ln -sfn "$(realpath --relative-to="$DRIVER_DIR" "$PWD/$KSU_DIR/kernel")" "$DRIVER_DIR/kernelsu"
+              grep -qF 'obj-$(CONFIG_KSU) += kernelsu/' "$DRIVER_DIR/Makefile" || \
+                echo 'obj-$(CONFIG_KSU) += kernelsu/' >> "$DRIVER_DIR/Makefile"
+              if ! grep -qF 'source "drivers/kernelsu/Kconfig"' "$DRIVER_DIR/Kconfig"; then
+                sed -i '/^endmenu$/i source "drivers/kernelsu/Kconfig"' "$DRIVER_DIR/Kconfig"
+              fi
+
+              # 从官方 Release APK 提取签名，加入 FinaSU 管理器第二信任槽。
+              FINASU_TEMP=$(mktemp -d "$RUNNER_TEMP/finasu.XXXXXX")
+              curl -fLSs --retry 3 --max-time 60 \
+                https://api.github.com/repos/LyraVoid/FinaSU/releases/latest \
+                -o "$FINASU_TEMP/release.json"
+              FINASU_APK_URL=$(python3 -c \
+                'import json,sys; d=json.load(open(sys.argv[1])); print(next(a["browser_download_url"] for a in d.get("assets", []) if a["name"].endswith(".apk")))' \
+                "$FINASU_TEMP/release.json")
+              curl -fLSs --retry 3 --max-time 300 -o "$FINASU_TEMP/manager.apk" "$FINASU_APK_URL"
+              CERT_INFO=$(python3 "$GITHUB_WORKSPACE/.github/scripts/extract_finasu_manager_cert.py" "$FINASU_TEMP/manager.apk")
+              read -r KSU_CERT_SIZE KSU_CERT_HASH <<< "$CERT_INFO"
+              if [[ ! "$KSU_CERT_SIZE" =~ ^0x[0-9a-fA-F]+$ || ! "$KSU_CERT_HASH" =~ ^[0-9a-fA-F]{64}$ ]]; then
+                echo "❌ FinaSU 管理器签名提取失败"
+                exit 1
+              fi
+              awk -v size="$KSU_CERT_SIZE" -v hash="$KSU_CERT_HASH" '
+                !done && /^ccflags-y \+= -DEXPECTED_HASH=/ {
+                  print
+                  print "KSU_EXPECTED_SIZE2 := " size
+                  print "KSU_EXPECTED_HASH2 := " hash
+                  print "KSU_SECOND_SIGNATURE_RELEASE := 1"
+                  done = 1
+                  next
+                }
+                { print }
+                END { if (!done) exit 1 }
+              ' "$KSU_DIR/kernel/Kbuild" > "$FINASU_TEMP/Kbuild"
+              mv "$FINASU_TEMP/Kbuild" "$KSU_DIR/kernel/Kbuild"
+              echo "FinaSU 管理器签名: size=$KSU_CERT_SIZE sha256=$KSU_CERT_HASH"
+              rm -rf "$FINASU_TEMP"
               ;;
             "ksunext")
               KSU_DIR=KernelSU-Next
@@ -336,7 +385,7 @@ jobs:
               BASE_COMMIT=$(git merge-base HEAD "refs/remotes/origin/$BASE_BRANCH" 2>/dev/null || git merge-base HEAD refs/remotes/origin/main 2>/dev/null || echo HEAD)
               KSU_VERSION=$(expr "$(git rev-list --count "$BASE_COMMIT")" + 30000)
               ;;
-            "ksu") KSU_VERSION=$(expr "$(git rev-list --count HEAD)" + 30000) ;;
+            "ksu"|"FinaSU") KSU_VERSION=$(expr "$(git rev-list --count HEAD)" + 30000) ;;
           esac
           [ -z "$KSU_VER_OVERRIDE" ] || KSU_VERSION="$KSU_VER_OVERRIDE"
           KSU_VERSION_TO_PATCH="$KSU_VER_OVERRIDE"
@@ -344,7 +393,7 @@ jobs:
           if [ "$KSU_VARIANT" = "SukiSU" ]; then
             KSU_VERSION_TO_PATCH=""
           fi
-          if [ "$KSU_VARIANT" = "ksunext" ] || [ "$KSU_VARIANT" = "ksu" ]; then
+          if [ "$KSU_VARIANT" = "ksunext" ] || [ "$KSU_VARIANT" = "ksu" ] || [ "$KSU_VARIANT" = "FinaSU" ]; then
             KSU_VERSION_TO_PATCH="$KSU_VERSION"
           fi
           # 官方 KSU 开启 SUSFS 时，先应用补丁，再覆盖版本，避免改坏补丁上下文。
@@ -723,7 +772,8 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_unused_helpers.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
 
       - name: Guard unsupported KernelSU SUSFS calls
-        if: ${{ env.KSU_ENABLED == 'true' }}
+        # FinaSU 已按所选 SUSFS 探测可用接口，保留其原生兼容门控。
+        if: ${{ env.KSU_ENABLED == 'true' && env.KSU_VARIANT != 'FinaSU' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1160,8 +1210,14 @@ jobs:
           sed -i -E '/^(CONFIG_KPM=|# CONFIG_KPM is not set)/d' "$CONFIG_FILE"
           if [ "$KPM_ENABLE" = "builtin" ] && [ "$KSU_ENABLED" = "true" ]; then
             echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
-          elif [ "$KSU_ENABLED" = "true" ]; then
+          elif [ "$KSU_ENABLED" = "true" ] && [ "$KSU_VARIANT" != "FinaSU" ]; then
             echo "# CONFIG_KPM is not set" >> "$CONFIG_FILE"
+          fi
+
+          # FinaSU 内置驱动必需的符号表与 preinit UAPI 头文件。
+          if [ "$KSU_VARIANT" = "FinaSU" ]; then
+            echo "CONFIG_KALLSYMS_ALL=y" >> "$CONFIG_FILE"
+            echo "CONFIG_HEADERS_INSTALL=y" >> "$CONFIG_FILE"
           fi
 
           # LSM配置*
@@ -1182,6 +1238,17 @@ jobs:
             echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+            # 按参考流程检测内联 hook；补丁缺少调用点时使用默认 Tracepoint。
+            if [ "$KSU_VARIANT" = "FinaSU" ]; then
+              chmod +x KernelSU/kernel/tools/check_susfs_inline.sh 2>/dev/null || true
+              if grep -q '^config KSU_HOOK_SUSFS_INLINE' KernelSU/kernel/Kconfig \
+                && bash KernelSU/kernel/tools/check_susfs_inline.sh common >/dev/null 2>&1; then
+                echo "CONFIG_KSU_HOOK_SUSFS_INLINE=y" >> "$CONFIG_FILE"
+                echo "FinaSU: 已选择 SUSFS Inline hook 后端"
+              else
+                echo "::warning::当前 SUSFS 补丁缺少内联 hook 调用点，FinaSU 使用 Tracepoint 后端"
+              fi
+            fi
           else
             sed -i -E '/^(CONFIG_KSU_SUSFS(_[A-Z0-9_]+)?=|# CONFIG_KSU_SUSFS(_[A-Z0-9_]+)? is not set)/d' "$CONFIG_FILE"
             if [ "$KSU_ENABLED" = "true" ]; then

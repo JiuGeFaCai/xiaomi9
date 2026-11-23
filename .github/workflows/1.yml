@@ -67,6 +67,11 @@ on:
         required: false
         default: false
         type: boolean
+      xiaomi_backport:
+        description: "启用小米系 6.6 回移补丁（erofs fsoffset + f2fs fault_report，红米请勿启用）"
+        required: false
+        default: false
+        type: boolean
       enable_wifi_bluetooth_fix:
         description: "是否启用 6.6 WiFi/蓝牙兼容性修复（三星 + 小米）"
         required: false
@@ -168,6 +173,28 @@ jobs:
          repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+
+      - name: 应用小米系开机兼容补丁(erofs fsoffset + f2fs fault_report)
+        if: inputs.xiaomi_backport
+        run: |
+          cd kernel_workspace/common
+          # 这两项是小米系开机的关键回移补丁，必须成功应用，失败立即中断（不做 || true 容忍）
+          echo "正在回移 erofs fsoffset（上游 c36ec00d7f67，小米作者）..."
+          wget -q "https://raw.githubusercontent.com/JiuGeFaCai/ak3_XHigh/main/xiaomi15_patch/0001-erofs-fsoffset-6.6.patch" -O /tmp/0001-erofs-fsoffset-6.6.patch
+          patch -p1 -F 3 < /tmp/0001-erofs-fsoffset-6.6.patch
+          echo "正在回移 f2fs fault_report（上游 f6b245660358，小米作者）..."
+          wget -q "https://raw.githubusercontent.com/JiuGeFaCai/ak3_XHigh/main/xiaomi15_patch/0002-f2fs-fault_report-6.6.patch" -O /tmp/0002-f2fs-fault_report-6.6.patch
+          patch -p1 -F 3 < /tmp/0002-f2fs-fault_report-6.6.patch
+          # 静态校验关键符号确实落地，避免补丁被模糊匹配到错误位置
+          grep -q 'fsparam_u64("fsoffset"' fs/erofs/super.c \
+            && grep -q 'map->m_fsoff = EROFS_SB(sb)->fsoff;' fs/erofs/data.c \
+            && grep -q 'iomap->addr = mdev.m_fsoff + mdev.m_pa;' fs/erofs/data.c \
+            || { echo "::error::erofs fsoffset 回移校验失败"; exit 1; }
+          grep -q 'void f2fs_fault_report(struct super_block' fs/f2fs/f2fs.h \
+            && grep -q 'TRACE_EVENT(f2fs_fault_report,' include/trace/events/f2fs.h \
+            && grep -q 'EXPORT_TRACEPOINT_SYMBOL_GPL(f2fs_fault_report);' fs/f2fs/super.c \
+            || { echo "::error::f2fs fault_report 回移校验失败"; exit 1; }
+          echo "小米系开机兼容补丁应用并校验完成。"
 
       - name: Fix missing vm_flags_clear for VMA padding
         working-directory: kernel_workspace/common

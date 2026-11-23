@@ -3,8 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       ci_VERSION:
-        description: "谷歌ci版本"
-        required: true
+        description: "谷歌 CI 分支（CI_BUILD_ID 留空时必填）"
+        required: false
+        default: ''
+      CI_BUILD_ID:
+        description: "谷歌 CI build ID（如 16372235；填写时优先，留空使用 ci_VERSION）"
+        type: string
+        required: false
         default: ''
       ANDROID_VERSION:
         description: "内核安卓版本"
@@ -158,21 +163,45 @@ jobs:
          sudo mv ~/repo /usr/local/bin/repo
 
       - name: Initialize repo and sync
+        shell: bash
+        env:
+          CI_BUILD_ID_INPUT: ${{ github.event.inputs.CI_BUILD_ID }}
+          CI_VERSION_INPUT: ${{ github.event.inputs.ci_VERSION }}
         run: |
-         mkdir kernel_workspace && cd kernel_workspace
-         FORMATTED_BRANCH="${{ github.event.inputs.ci_VERSION }}"
-         repo init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-${FORMATTED_BRANCH} --repo-rev=v2.16
-         REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common ${FORMATTED_BRANCH})
-         DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
-         if grep -q deprecated <<< $REMOTE_BRANCH; then
-         echo "Found deprecated branch: ${FORMATTED_BRANCH}"
-         sed -i 's/"'${FORMATTED_BRANCH}'"/"deprecated\/'${FORMATTED_BRANCH}'"/g' $DEFAULT_MANIFEST_PATH
-         cat $DEFAULT_MANIFEST_PATH
-         fi
-         repo --version
-         repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
+          set -euo pipefail
+          CI_BUILD_ID="$(printf '%s' "${CI_BUILD_ID_INPUT:-}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+          FORMATTED_BRANCH="$(printf '%s' "${CI_VERSION_INPUT:-}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+          mkdir kernel_workspace && cd kernel_workspace
 
-         rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+          if [ -n "$CI_BUILD_ID" ]; then
+            if [[ ! "$CI_BUILD_ID" =~ ^[0-9]+$ ]]; then
+              echo "::error::CI_BUILD_ID 必须是纯数字，例如 16372235"
+              exit 1
+            fi
+            echo "使用 Google CI build ${CI_BUILD_ID} 的固定源码清单"
+            # 固定清单使用新版 repo，关闭 superproject，按清单中的提交同步。
+            repo init --depth=1 --standalone-manifest --no-use-superproject \
+              -u "https://ci.android.com/builds/submitted/${CI_BUILD_ID}/kernel_aarch64/latest/raw/manifest_${CI_BUILD_ID}.xml"
+          else
+            if [ -z "$FORMATTED_BRANCH" ]; then
+              echo "::error::请填写 CI_BUILD_ID 或 ci_VERSION"
+              exit 1
+            fi
+            echo "使用 Google CI 分支 common-${FORMATTED_BRANCH}"
+            repo init --depth=1 -u https://android.googlesource.com/kernel/manifest \
+              -b "common-${FORMATTED_BRANCH}" --repo-rev=v2.16
+            REMOTE_BRANCH=$(git ls-remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
+            DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
+            if grep -q deprecated <<< "$REMOTE_BRANCH"; then
+              echo "Found deprecated branch: ${FORMATTED_BRANCH}"
+              sed -i "s|\"${FORMATTED_BRANCH}\"|\"deprecated/${FORMATTED_BRANCH}\"|g" "$DEFAULT_MANIFEST_PATH"
+              cat "$DEFAULT_MANIFEST_PATH"
+            fi
+          fi
+          repo --version
+          repo --trace sync -c -j"$(nproc --all)" --no-tags --fail-fast
+
+          rm common/android/abi_gki_protected_exports_* || echo "No protected exports!"
 
       - name: 应用小米系开机兼容补丁(erofs fsoffset + f2fs fault_report)
         if: inputs.xiaomi_backport

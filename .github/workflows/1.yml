@@ -1332,6 +1332,13 @@ jobs:
           sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
           if [ -f "BUILD.bazel" ]; then
+          # New common_kernel() targets check defconfig independently of build.config.gki.
+          if grep -q '^common_kernel(' BUILD.bazel; then
+            sed -i '/^[[:space:]]*name[[:space:]]*=[[:space:]]*"kernel_aarch64",[[:space:]]*$/,/^)/ {
+              /^[[:space:]]*check_defconfig[[:space:]]*=/d
+              /"kernel_aarch64"/a\    check_defconfig = "disabled",
+            }' BUILD.bazel
+          fi
           sed -i '/"protected_exports_list": "android\/abi_gki_protected_exports_aarch64"/d' BUILD.bazel
           fi
           

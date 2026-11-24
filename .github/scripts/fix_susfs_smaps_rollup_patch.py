@@ -65,8 +65,10 @@ def adapt_patch(kernel_dir, patch_path):
         a, b = signature.start() + match.start(), signature.start() + match.end()
         indent = match[1]
         # Guard only statistics; VMA progress and lock handling stay unconditional.
+        # Older SUSFS macros expand to an unparenthesized A && B && C chain.
+        # Negate the entire expansion, rather than only its first operand.
         replacement = (f"#ifdef {CONFIG}\n"
-                       f"{indent}if (!vma->vm_file || !{HIDDEN})\n#endif\n"
+                       f"{indent}if (!vma->vm_file || !({HIDDEN}))\n#endif\n"
                        f"{indent}\t{source[a + len(indent):b]}")
         updated = updated[:a] + replacement + updated[b:]
     replacement_hunks = list(difflib.unified_diff(

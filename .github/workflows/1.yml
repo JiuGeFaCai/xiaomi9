@@ -179,9 +179,15 @@ jobs:
               exit 1
             fi
             echo "使用 Google CI build ${CI_BUILD_ID} 的固定源码清单"
-            # 固定清单使用新版 repo，关闭 superproject，按清单中的提交同步。
+            # 保持浅克隆，避免旧分支提示导致 repo 改为拉取完整历史。
+            export REPO_ALLOW_SHALLOW=1
             repo init --depth=1 --standalone-manifest --no-use-superproject \
               -u "https://ci.android.com/builds/submitted/${CI_BUILD_ID}/kernel_aarch64/latest/raw/manifest_${CI_BUILD_ID}.xml"
+            # CI 清单固定提交，但 upstream 仍可能指向后来迁移的旧分支。
+            CI_MANIFEST_PATH=.repo/manifests/default.xml
+            cp "$CI_MANIFEST_PATH" "manifest_${CI_BUILD_ID}.xml"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/prepare_ci_manifest.py" \
+              "manifest_${CI_BUILD_ID}.xml" "$CI_MANIFEST_PATH"
           else
             if [ -z "$FORMATTED_BRANCH" ]; then
               echo "::error::请填写 CI_BUILD_ID 或 ci_VERSION"

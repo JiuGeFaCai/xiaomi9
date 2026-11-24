@@ -580,6 +580,7 @@ jobs:
            SUSFS_PATCH="50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch"
            python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_pagemap.py" "$PWD" --patch "$SUSFS_PATCH"
            python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_namespace_patch.py" "$PWD" "$SUSFS_PATCH"
+           python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_smaps_rollup_patch.py" "$PWD" "$SUSFS_PATCH"
            patch --batch -p1 -F 3 < "$SUSFS_PATCH" || true
            python3 "$GITHUB_WORKSPACE/.github/scripts/fix_susfs_pagemap.py" "$PWD"
 

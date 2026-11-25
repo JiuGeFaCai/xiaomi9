@@ -70,6 +70,37 @@ def patch_section(lines):
     return start, end, list(zip(hunks, hunks[1:] + [end]))
 
 
+def adapt_mm_hook_context(source, lines):
+    """Drop an absent vendor include only where it anchors the SUSFS include."""
+    if re.search(r"(?m)^\s*#\s*include\s*<trace/hooks/mm\.h>", code_only(source)):
+        return lines, False
+    section = patch_section(lines)
+    if section is None:
+        return lines, False
+    updated = list(lines)
+    changed = False
+    context = " #include <trace/hooks/mm.h>\n"
+    for start, end in reversed(section[2]):
+        body = lines[start + 1:end]
+        if context not in body or "+#include <linux/susfs_def.h>\n" not in body:
+            continue
+        header = re.fullmatch(
+            r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)",
+            lines[start].rstrip("\n"),
+        )
+        if header is None:
+            raise SystemExit("SUSFS task_mmu: invalid mm hook include hunk; no changes written")
+        kept = [line for line in body if line != context]
+        old_count = sum(line.startswith((" ", "-")) for line in kept)
+        new_count = sum(line.startswith((" ", "+")) for line in kept)
+        updated[start:end] = [
+            f"@@ -{header[1]},{old_count} +{header[3]},{new_count} @@{header[5]}\n",
+            *kept,
+        ]
+        changed = True
+    return updated, changed
+
+
 def rebase_hunk(source, header, body):
     before = "".join(line[1:] for line in body if line.startswith((" ", "-")))
     after = "".join(line[1:] for line in body if line.startswith((" ", "+")))
@@ -121,7 +152,9 @@ def adapt_patch(kernel_dir, patch_path):
         print("SUSFS smaps rollup: legacy walker; no patch adaptation needed")
         return False
 
-    lines = patch_path.read_text().splitlines(keepends=True)
+    lines, context_changed = adapt_mm_hook_context(
+        source, patch_path.read_text().splitlines(keepends=True),
+    )
     section = patch_section(lines)
     if section is None:
         print("SUSFS smaps rollup: no task_mmu.c patch section")
@@ -131,7 +164,7 @@ def adapt_patch(kernel_dir, patch_path):
               if "show_smaps_rollup(" in lines[a]]
     if not legacy or not any("smap_gather_stats(priv, vma, &mss);" in line
                              for a, b in legacy for line in lines[a:b]):
-        print("SUSFS smaps rollup: patch already uses a compatible walker")
+        print("SUSFS smaps rollup: no legacy walker hunks to rebase")
         return False
     additions = [line[1:].strip() for a, b in legacy
                  for line in lines[a + 1:b] if line.startswith("+")]
@@ -175,13 +208,66 @@ def adapt_patch(kernel_dir, patch_path):
     verify_source(updated)
     lines[start:stop] = replacement_section
     patch_path.write_text("".join(lines))
+    if context_changed:
+        print("SUSFS task_mmu: removed absent mm hook include context")
     print("SUSFS task_mmu: rebased all file hunks; guarded all three rollup statistics calls")
     return True
 
 
 def compact_body(bounds):
-    code = re.sub(r"(?m)^[ \t]*#(?:if|ifdef|ifndef|elif|else|endif)\b[^\n]*", "", bounds[2])
-    return re.sub(r"\s+", "", code)
+    # Validate the SUS_MAP-enabled path, excluding its disabled #else branches.
+    # Keep unrelated conditional branches so every possible call is checked.
+    lines = []
+    stack = []
+    active = True
+    for line in bounds[2].splitlines(keepends=True):
+        directive = re.match(r"^[ \t]*#(if|ifdef|ifndef|elif|else|endif)\b(.*)", line)
+        if directive is None:
+            if active:
+                lines.append(line)
+            continue
+        kind, expression = directive.groups()
+        condition = None
+        expression = re.sub(r"\s+", "", expression)
+        if CONFIG in expression:
+            if kind in ("ifdef", "ifndef") and expression == CONFIG:
+                condition = kind == "ifdef"
+            elif kind in ("if", "elif") and expression in (
+                CONFIG, f"defined({CONFIG})", f"defined{CONFIG}",
+            ):
+                condition = True
+            elif kind in ("if", "elif") and expression in (
+                f"!defined({CONFIG})", f"!defined{CONFIG}",
+            ):
+                condition = False
+            else:
+                raise SystemExit("SUSFS task_mmu: unrecognized SUS_MAP condition; stopping for review")
+        if kind in ("if", "ifdef", "ifndef"):
+            stack.append((active, condition))
+            active = active and condition is not False
+        elif kind in ("else", "elif"):
+            parent, taken = stack[-1]
+            active = parent and taken is not True and (kind == "else" or condition is not False)
+            stack[-1] = (parent, taken if kind == "else" or taken is True else condition)
+        else:
+            active, _ = stack.pop()
+    return re.sub(r"\s+", "", "".join(lines))
+
+
+def rollup_call_guarded(body, call):
+    hidden = re.escape(HIDDEN)
+    before = body[:call.start()]
+    if re.search(rf"if\(!vma->vm_file\|\|!\({hidden}\)\)\{{?$", before):
+        return True
+    bypass = re.search(
+        rf"if\(vma->vm_file&&\(?{hidden}\)?\)goto(?P<label>\w+);$", before,
+    )
+    # The author's 5.15 patch jumps over exactly one statistics call. The
+    # progress update and lock handling must remain outside that skipped span.
+    return bypass is not None and re.match(
+        rf"smap_gather_stats\(vma,&mss,(?:0|last_vma_end)\);{re.escape(bypass['label'])}:",
+        body[call.start():],
+    ) is not None
 
 
 def verify_source(source):
@@ -196,7 +282,6 @@ def verify_source(source):
     if not has_modern_walker(bounds):
         raise SystemExit("SUSFS task_mmu: unknown upstream statistics walker; stopping for review")
     hidden = re.escape(HIDDEN)
-    visible = re.compile(rf"if\(!vma->vm_file\|\|!\({hidden}\)\)\{{?$")
     # New upstream patches may filter centrally in smap_gather_stats(), instead
     # of guarding its call sites. Accept that form without injecting duplicates.
     helper = function_bounds(source, "smap_gather_stats")
@@ -207,7 +292,7 @@ def verify_source(source):
     body = compact_body(bounds)
     calls = list(re.finditer(r"\bsmap_gather_stats\(vma,", body))
     if not helper_guarded and (not calls or any(
-        visible.search(body[:call.start()]) is None for call in calls
+        not rollup_call_guarded(body, call) for call in calls
     )):
         raise SystemExit("SUSFS task_mmu: upstream rollup hooks are missing or unrecognized; no fuzzy fallback")
     smap = function_bounds(source, "show_smap")
@@ -242,12 +327,12 @@ def preview_section(source, section, reverse=False):
         return target.read_text() if result.returncode == 0 else None
 
 
-def apply_rebased_patch(kernel_dir, patch_path):
+def apply_rebased_patch(kernel_dir, patch_path, section=None):
     lines = patch_path.read_text().splitlines(keepends=True)
     start, stop, _ = patch_section(lines)
     with tempfile.TemporaryDirectory(prefix="susfs-task-mmu-") as tmp:
         isolated = Path(tmp) / "task_mmu.patch"
-        isolated.write_text("".join(lines[start:stop]))
+        isolated.write_text(section if section is not None else "".join(lines[start:stop]))
         command = ["patch", "--batch", "--forward", "--fuzz=0", "--no-backup-if-mismatch",
                    "-p1", "-i", str(isolated)]
         for dry_run in (True, False):
@@ -277,14 +362,18 @@ def prepare_and_apply(kernel_dir, patch_path):
     if not has_modern_walker(bounds):
         raise SystemExit("SUSFS task_mmu: unknown upstream statistics walker; no changes written")
     start, stop, _ = section
-    isolated = "".join(lines[start:stop])
+    isolated_lines, context_changed = adapt_mm_hook_context(source, lines[start:stop])
+    isolated = "".join(isolated_lines)
     candidate = preview_section(source, isolated)
     if candidate is not None:
         # Prefer an updated author's patch when it already fits this source.
         # Validate its hooks, then apply it verbatim with zero fuzz.
         verify_source(candidate)
-        print("SUSFS task_mmu: upstream patch already fits; applying without adaptation")
-        apply_rebased_patch(kernel_dir, patch_path)
+        if context_changed:
+            print("SUSFS task_mmu: removed absent mm hook include context; retaining upstream hooks")
+        else:
+            print("SUSFS task_mmu: upstream patch already fits; applying without adaptation")
+        apply_rebased_patch(kernel_dir, patch_path, isolated)
         return
     if preview_section(source, isolated, reverse=True) is not None:
         verify_source(source)

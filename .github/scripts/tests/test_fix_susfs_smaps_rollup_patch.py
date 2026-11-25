@@ -219,6 +219,59 @@ OTHER_PATCH = """diff --git a/other.c b/other.c
 """
 
 
+MM_INCLUDE_SOURCE = """#include <linux/uaccess.h>
+#include <linux/pkeys.h>
+
+#include <asm/elf.h>
+#include <asm/tlb.h>
+
+"""
+
+# The 5.15 walker has two statistics calls. Its author's patch bypasses the
+# first call with a label and guards the second in a SUS_MAP-only #if branch.
+SOURCE_515 = """static int show_smaps_rollup(struct vm_area_struct *vma)
+{
+\tstruct mem_size_stats mss = {0};
+\tunsigned long last_vma_end;
+
+\tsmap_gather_stats(vma, &mss, 0);
+\tlast_vma_end = vma->vm_end;
+\tif (contended) {
+\t\tunlocks++;
+\t\tlocks++;
+\t\tvma = &next_vma;
+\t\tif (vma->vm_end > last_vma_end)
+\t\t\tsmap_gather_stats(vma, &mss, last_vma_end);
+\t\tlast_vma_end = vma->vm_end;
+\t}
+\treported_end = last_vma_end;
+\treturn mss.total;
+}
+"""
+
+UPDATED_515 = SOURCE_515.replace(
+    "\tsmap_gather_stats(vma, &mss, 0);\n",
+    "#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n"
+    "\tif (vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))\n"
+    "\t\tgoto bypass_orig_flow;\n"
+    "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n"
+    "\tsmap_gather_stats(vma, &mss, 0);\n"
+    "#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n"
+    "bypass_orig_flow:\n"
+    "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n",
+).replace(
+    "\t\t\tsmap_gather_stats(vma, &mss, last_vma_end);\n",
+    "#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n"
+    "\t\t{\n"
+    "\t\t\tif (!vma->vm_file || !(SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file))))\n"
+    "\t\t\t\tsmap_gather_stats(vma, &mss, last_vma_end);\n"
+    "\t\t}\n"
+    "#else\n"
+    "\t\t\tsmap_gather_stats(vma, &mss, last_vma_end);\n"
+    "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n",
+)
+
+
 class RollupPatchTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -397,6 +450,91 @@ class RollupPatchTest(unittest.TestCase):
         self.patch.write_text(self.upstream_patch(original, updated))
         self.assertIn("without adaptation", self.prepare())
         self.assertEqual(self.source.read_text(), updated)
+
+    def test_515_author_hooks_apply_without_vendor_mm_include(self):
+        vendor_includes = MM_INCLUDE_SOURCE.replace(
+            "#include <linux/pkeys.h>\n",
+            "#include <linux/pkeys.h>\n#include <trace/hooks/mm.h>\n",
+        )
+        fixed_includes = vendor_includes.replace(
+            "#include <trace/hooks/mm.h>\n",
+            "#include <trace/hooks/mm.h>\n"
+            "#ifdef CONFIG_KSU_SUSFS_SUS_MAP\n#include <linux/susfs_def.h>\n#endif\n",
+        )
+        author_patch = self.upstream_patch(
+            vendor_includes + SOURCE_515, fixed_includes + UPDATED_515,
+        )
+        for vendor_hook_present in (False, True):
+            with self.subTest(vendor_hook_present=vendor_hook_present):
+                includes = vendor_includes if vendor_hook_present else MM_INCLUDE_SOURCE
+                original = includes + SOURCE_515
+                expected = fixed_includes + UPDATED_515
+                if not vendor_hook_present:
+                    expected = expected.replace("#include <trace/hooks/mm.h>\n", "")
+                self.source.write_text(original)
+                self.patch.write_text(OTHER_PATCH + author_patch)
+                self.assertEqual(rollup.preview_section(original, author_patch) is not None,
+                                 vendor_hook_present)
+                output = self.prepare()
+                self.assertIn("without adaptation" if vendor_hook_present else "absent mm hook", output)
+                self.assertEqual(self.source.read_text(), expected)
+                self.assertEqual(self.patch.read_text(), OTHER_PATCH)
+                self.assertFalse(list(self.root.rglob("*.rej")))
+                self.patch.write_text(OTHER_PATCH + author_patch)
+                self.assertIn("skipping duplicate", self.prepare())
+                self.assertEqual(self.source.read_text(), expected)
+                self.assertEqual(self.patch.read_text(), OTHER_PATCH)
+        if not shutil.which("clang"):
+            self.skipTest("clang is required for the behavior check")
+        check = self.root / "check.c"
+        check.write_text(PREAMBLE + UPDATED_515 + MAIN)
+        for enabled in (False, True):
+            command = ["clang", "-std=gnu11", "-Werror", "-Wlogical-op-parentheses",
+                       str(check), "-o", str(self.root / "check")]
+            if enabled:
+                command.append("-DCONFIG_KSU_SUSFS_SUS_MAP")
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(subprocess.run([str(self.root / "check")]).returncode, 0)
+
+    def test_515_goto_cannot_skip_progress_and_disabled_guards_are_rejected(self):
+        for updated in (
+            UPDATED_515.replace(
+                "bypass_orig_flow:\n#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n"
+                "\tlast_vma_end = vma->vm_end;",
+                "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP\n"
+                "\tlast_vma_end = vma->vm_end;\nbypass_orig_flow:",
+            ),
+            UPDATED_515.replace("goto bypass_orig_flow;", "goto missing_label;"),
+            UPDATED_515.replace("#ifdef CONFIG_KSU_SUSFS_SUS_MAP", "#ifndef CONFIG_KSU_SUSFS_SUS_MAP"),
+            UPDATED_515.replace("#ifdef CONFIG_KSU_SUSFS_SUS_MAP", "#if 0"),
+        ):
+            with self.subTest(updated=updated):
+                self.source.write_text(SOURCE_515)
+                patch = self.upstream_patch(SOURCE_515, updated)
+                self.patch.write_text(patch)
+                with self.assertRaises(SystemExit):
+                    self.prepare()
+                self.assertEqual(self.source.read_text(), SOURCE_515)
+                self.assertEqual(self.patch.read_text(), patch)
+
+    def test_mm_include_context_adaptation_is_atomic_on_unrelated_mismatch(self):
+        author_source = MM_INCLUDE_SOURCE.replace(
+            "#include <linux/pkeys.h>\n",
+            "#include <linux/pkeys.h>\n#include <trace/hooks/mm.h>\n",
+        ) + SOURCE_515
+        updated = author_source.replace(
+            "#include <trace/hooks/mm.h>\n",
+            "#include <trace/hooks/mm.h>\n#include <linux/susfs_def.h>\n",
+        ).replace(SOURCE_515, UPDATED_515)
+        source = (MM_INCLUDE_SOURCE + SOURCE_515).replace("#include <linux/pkeys.h>\n", "")
+        patch = self.upstream_patch(author_source, updated) + OTHER_PATCH
+        self.source.write_text(source)
+        self.patch.write_text(patch)
+        with self.assertRaises(SystemExit):
+            self.prepare()
+        self.assertEqual(self.source.read_text(), source)
+        self.assertEqual(self.patch.read_text(), patch)
 
     def test_unrecognized_author_update_stops_before_modifications(self):
         for updated in (

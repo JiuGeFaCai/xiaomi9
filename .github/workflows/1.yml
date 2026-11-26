@@ -54,9 +54,9 @@ on:
           - 'kpn'
       KERNEL_NAME:
         type: string
-        description: "自定义内核后缀 (留空使用随机伪官方后缀，输入-1关闭)"
+        description: "内核后缀（默认 -1 保留原生后缀，留空生成随机后缀，填写其他文字可自定义）"
         required: false
-        default: ""
+        default: "-1"
       BUILD_TIME:
         type: string
         description: "自定义构建时间 (输入F使用当前UTC时间，输入-1关闭)"

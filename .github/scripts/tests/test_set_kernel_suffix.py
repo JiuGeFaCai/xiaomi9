@@ -51,15 +51,15 @@ class KernelSuffixTest(unittest.TestCase):
         self.path = self.root / "scripts/setlocalversion"
         self.path.parent.mkdir()
 
-    def patch(self, original, suffix="-android17-1-o-g0123456789abcd"):
+    def patch(self, original, suffix="-android17-1-o-g0123456789abcd", build_number=""):
         self.path.write_text(original)
         self.path.chmod(0o755)
-        kernel_suffix.set_suffix(self.root, suffix)
+        kernel_suffix.set_suffix(self.root, suffix, build_number)
 
-    def run_script(self, *args):
+    def run_script(self, *args, **env):
         return subprocess.run(
             ["sh", str(self.path), *args], cwd=self.root,
-            env={**os.environ, "KERNELVERSION": "6.18.21"},
+            env={**os.environ, "KERNELVERSION": "6.18.21", **env},
             text=True, capture_output=True, check=True,
         ).stdout
 
@@ -78,6 +78,33 @@ class KernelSuffixTest(unittest.TestCase):
         self.assertEqual(self.path.read_text().splitlines()[:-1], LEGACY.splitlines()[:-1])
         self.assertEqual(self.run_script("--save-scmversion"), "")
         self.assertEqual((self.root / ".scmversion").read_text(), "-upstream\n")
+
+    def test_selected_build_number_survives_custom_output_and_is_not_duplicated(self):
+        for source, prefix in ((MODERN, "6.18.21"), (LEGACY, "")):
+            for suffix in ("-android17-test", "-android17-test-ab016372235"):
+                with self.subTest(prefix=prefix, suffix=suffix):
+                    self.patch(source, suffix, "016372235")
+                    self.assertEqual(self.run_script(BUILD_NUMBER=""), prefix + "-android17-test-ab016372235\n")
+
+    def test_number_only_keeps_upstream_output_and_early_exits(self):
+        legacy = LEGACY.replace('res="$res-dirty"', 'res="$res-dirty${BUILD_NUMBER:+-ab$BUILD_NUMBER}"')
+        for source, expected in ((MODERN, "6.18.21-file-4k-local-upstream-dirty"), (legacy, "-file-4k-dirty")):
+            with self.subTest(expected=expected):
+                self.patch(source, None, "16372235")
+                for number in ("", "16372235"):
+                    self.assertEqual(self.run_script(BUILD_NUMBER=number), expected + "-ab16372235\n")
+                if source == MODERN:
+                    self.assertEqual(self.run_script("--no-local"), "6.18.21-upstream-dirty\n")
+                else:
+                    self.assertEqual(self.run_script("--save-scmversion"), "")
+                    self.assertEqual((self.root / ".scmversion").read_text(), "-upstream\n")
+
+    def test_invalid_build_number_does_not_modify_source(self):
+        self.path.write_text(MODERN)
+        for number in ("", "x123", "123\n"):
+            with self.subTest(number=number), self.assertRaises(ValueError):
+                kernel_suffix.set_suffix(self.root, None, number)
+            self.assertEqual(self.path.read_text(), MODERN)
 
     def test_shell_characters_are_literal_and_cannot_execute_commands(self):
         suffix = "-android17-'\"\\&|$(touch injected)`touch injected`"

@@ -850,7 +850,7 @@ jobs:
 
       - name: Guard unsupported KernelSU SUSFS calls
         # FinaSU 已按所选 SUSFS 探测可用接口，保留其原生兼容门控。
-        if: ${{ env.KSU_ENABLED == 'true' && env.KSU_VARIANT != 'FinaSU' }}
+        if: ${{ env.KSU_ENABLED == 'true' && env.KSU_SUSFS_ENABLED == 'true' && env.KSU_VARIANT != 'FinaSU' }}
         shell: bash
         run: |
           set -euo pipefail

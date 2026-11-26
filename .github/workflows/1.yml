@@ -108,11 +108,7 @@ on:
         default: false
         type: boolean
       sukisu_tag:
-        description: "SukiSU 完整版本来源后缀（附加到 @分支 后，留空不追加）"
-        required: false
-        default: ""
-      bakasu_tag:
-        description: "BakaSU 版本后缀（填写 @ 后的文字，留空使用 BakaSU 官方默认格式）"
+        description: "版本后缀（SukiSU 显示为 @分支-后缀，BakaSU 显示为 @后缀，留空不追加）"
         type: string
         required: false
         default: ""
@@ -1294,7 +1290,7 @@ jobs:
 
       - name: Add SUSFS Configuration Settings
         env:
-          BAKASU_TAG: ${{ inputs.bakasu_tag }}
+          BAKASU_TAG: ${{ inputs.sukisu_tag }}
         run: |
           cd kernel_workspace
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig

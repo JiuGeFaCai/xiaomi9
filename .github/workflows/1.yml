@@ -1124,7 +1124,9 @@ jobs:
         if: ${{inputs.enable_lsm }}
         run: |
          cd kernel_workspace
-         git clone https://github.com/JiuGeFaCai/sturdy-journey.git
+         if [ ! -d sturdy-journey/.git ]; then
+           git clone https://github.com/JiuGeFaCai/sturdy-journey.git
+         fi
          cp ./sturdy-journey/lsm.patch ./common/
          cd ./common
          patch -p1 -F 3 < lsm.patch

@@ -112,7 +112,7 @@ on:
         required: false
         default: ""
       bakasu_tag:
-        description: "BakaSU 版本来源后缀（如 cctv18，显示为 标签-提交号@cctv18；留空使用上游格式）"
+        description: "BakaSU 版本后缀（填写 @ 后的文字，留空使用 BakaSU 官方默认格式）"
         type: string
         required: false
         default: ""

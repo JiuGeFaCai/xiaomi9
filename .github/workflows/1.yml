@@ -77,6 +77,11 @@ on:
         required: false
         default: false
         type: boolean
+      enable_6_18_patch:
+        description: "修补 6.18 支持（GKI 模块签名兼容补丁）"
+        type: boolean
+        required: false
+        default: false
       xiaomi_backport:
         description: "启用小米系 6.6 回移补丁（erofs fsoffset + f2fs fault_report，红米请勿启用）"
         required: false
@@ -1112,13 +1117,20 @@ jobs:
           done
           
       - name: Checkout sturdy-journey patches
-        if: ${{ inputs.enable_oneplus || inputs.enable_lsm }}
+        if: ${{ inputs.enable_oneplus || inputs.enable_lsm || inputs.enable_6_18_patch }}
         uses: actions/checkout@v4
         with:
           repository: JiuGeFaCai/sturdy-journey
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: kernel_workspace/sturdy-journey
           persist-credentials: false
+
+      - name: 应用 6.18 GKI 模块签名兼容补丁
+        if: ${{ inputs.enable_6_18_patch }}
+        working-directory: kernel_workspace/common
+        run: |
+          cp ../sturdy-journey/gki-module-sig-compat-6.18.patch .
+          patch --batch --forward -p1 < gki-module-sig-compat-6.18.patch
 
       - name: oneplus
         if: ${{inputs.enable_oneplus }}

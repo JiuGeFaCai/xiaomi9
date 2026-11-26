@@ -916,16 +916,15 @@ jobs:
       - name: Apply KPM Patch
         run: |
          set -euo pipefail
-         OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/dist"
-         if [ ! -f "$OUTDIR/Image" ]; then
+         if [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.1" ]; then
+           OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/dist"
+         else
            OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/out/dist"
          fi
          if [ ! -f "$OUTDIR/Image" ]; then
            echo "未找到 Image: $OUTDIR/Image"
            exit 1
          fi
-
-         echo "KERNEL_DIST_DIR=$OUTDIR" >> "$GITHUB_ENV"
 
          # 打印最终内核版本，核对后缀与构建时间是否按预期生效
          strings "$OUTDIR/Image" | grep -m1 "Linux version" || echo "未能从 Image 提取版本串"
@@ -955,7 +954,11 @@ jobs:
       - name: Make AnyKernel3
         run: |
          set -euo pipefail
-         OUTDIR="$KERNEL_DIST_DIR"
+         if [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.1" ]; then
+           OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/dist"
+         else
+           OUTDIR="$GITHUB_WORKSPACE/kernel_workspace/out/dist"
+         fi
          if [ ! -f "$OUTDIR/Image" ]; then
            echo "未找到 Image: $OUTDIR/Image"
            exit 1

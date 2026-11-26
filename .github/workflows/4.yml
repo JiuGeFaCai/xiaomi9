@@ -64,9 +64,14 @@ on:
         default: false
         type: boolean
       sukisu_tag:
-        description: "SukiSU 完整版本来源后缀（附加到 @分支 后）"
+        description: "SukiSU 完整版本来源后缀（附加到 @分支 后，留空不追加）"
         required: false
-        default: "酷安-ITXUU-禁止黑灰违法犯罪倒卖"
+        default: ""
+      bakasu_tag:
+        description: "BakaSU 版本来源后缀（如 cctv18，显示为 标签-提交号@cctv18；留空使用上游格式）"
+        type: string
+        required: false
+        default: ""
       enable_susfs:
         description: "是否移植 SUSFS（none 模式自动跳过）"
         required: false
@@ -353,7 +358,7 @@ jobs:
           echo "KSUVARIANT=$KSU_NAME" >> "$GITHUB_ENV"
           echo "KSU_REF=$KSU_REF" >> "$GITHUB_ENV"
           echo "KSUVER=${KSU_VERSION}" >> "$GITHUB_ENV"
-          echo "KernelSU: $KSU_NAME, version: $KSU_VERSION, ref: $KSU_REF, tag: ${TAG_SUFFIX_IN:-}"
+          echo "KernelSU: $KSU_NAME, version: $KSU_VERSION, ref: $KSU_REF"
 
       - name: Fix SukiSU/BakaSU 6.12 compatibility
         if: ${{ startsWith(github.event.inputs.ci_VERSION, 'android16-6.12') && (github.event.inputs.ksu_variant == 'SukiSU' || github.event.inputs.ksu_variant == 'BakaSU') }}
@@ -791,9 +796,19 @@ jobs:
 
 
       - name: Add SUSFS Configuration Settings
+        env:
+          BAKASU_TAG: ${{ inputs.bakasu_tag }}
         run: |
           cd kernel_workspace
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
+          if [ "$KSU_VARIANT" = "BakaSU" ] && [ -n "$BAKASU_TAG" ]; then
+            if [[ ! "$BAKASU_TAG" =~ ^[[:alnum:]_.@+-]+$ ]]; then
+              echo "::error::BakaSU 后缀可使用中文、字母、数字及 . _ @ + -"
+              exit 1
+            fi
+            ./common/scripts/config --file "$CONFIG_FILE" --set-str KSU_FULL_NAME_FORMAT "%TAG_NAME%-%COMMIT_SHA%@${BAKASU_TAG}"
+          fi
+
           KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
           KSU_VARIANT="${{ github.event.inputs.ksu_variant }}"
 

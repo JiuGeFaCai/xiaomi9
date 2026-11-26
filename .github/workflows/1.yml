@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       use_ci_build_number:
-        description: "使用 CI_BUILD_ID 作为 BUILD_NUMBER，并在内核版本末尾显示 -ab编号（仅按 ID 构建时生效）"
+        description: "将 CI_BUILD_ID 作为编译时的 BUILD_NUMBER（仅按 ID 构建时生效）"
         type: boolean
         required: false
         default: false
@@ -174,10 +174,10 @@ jobs:
          sudo mv ~/repo /usr/local/bin/repo
 
       - name: Initialize repo and sync
+        id: kernel_source
         shell: bash
         env:
           CI_BUILD_ID_INPUT: ${{ github.event.inputs.CI_BUILD_ID }}
-          USE_CI_BUILD_NUMBER: ${{ inputs.use_ci_build_number }}
           CI_VERSION_INPUT: ${{ github.event.inputs.ci_VERSION }}
         run: |
           set -euo pipefail
@@ -200,9 +200,7 @@ jobs:
             cp "$CI_MANIFEST_PATH" "manifest_${CI_BUILD_ID}.xml"
             python3 "$GITHUB_WORKSPACE/.github/scripts/prepare_ci_manifest.py" \
               "manifest_${CI_BUILD_ID}.xml" "$CI_MANIFEST_PATH"
-            if [ "$USE_CI_BUILD_NUMBER" = "true" ]; then
-              echo "CI_BUILD_NUMBER=$CI_BUILD_ID" >> "$GITHUB_ENV"
-            fi
+            echo "ci_build_id=$CI_BUILD_ID" >> "$GITHUB_OUTPUT"
           else
             if [ -z "$FORMATTED_BRANCH" ]; then
               echo "::error::请填写 CI_BUILD_ID 或 ci_VERSION"
@@ -1416,7 +1414,7 @@ jobs:
             *)                                         LOCALVER="-${KANDROID_VERSION}-${SUFFIX}" ;;
           esac
           python3 "$GITHUB_WORKSPACE/.github/scripts/set_kernel_suffix.py" \
-            "$GITHUB_WORKSPACE/kernel_workspace/common" --suffix="$LOCALVER" --build-number="${CI_BUILD_NUMBER:-}"
+            "$GITHUB_WORKSPACE/kernel_workspace/common" --suffix="$LOCALVER"
           echo "内核后缀: ${LOCALVER}"
 
       # 伪官方格式的随机后缀（仅在 KERNEL_NAME 留空时生效）
@@ -1435,12 +1433,8 @@ jobs:
           RANDOM_SUFFIX="${RANDOM_DIGIT}-o-g${RANDOM_HASH}"
 
           python3 "$GITHUB_WORKSPACE/.github/scripts/set_kernel_suffix.py" \
-            "$GITHUB_WORKSPACE/kernel_workspace/common" --suffix="-${KANDROID_VERSION}-${RANDOM_SUFFIX}" --build-number="${CI_BUILD_NUMBER:-}"
+            "$GITHUB_WORKSPACE/kernel_workspace/common" --suffix="-${KANDROID_VERSION}-${RANDOM_SUFFIX}"
           echo "内核后缀(随机): -${KANDROID_VERSION}-${RANDOM_SUFFIX}"
-
-      - name: Add CI build number to the upstream kernel release
-        if: ${{ inputs.KERNEL_NAME == '-1' && env.CI_BUILD_NUMBER != '' }}
-        run: python3 .github/scripts/set_kernel_suffix.py kernel_workspace/common --build-number="$CI_BUILD_NUMBER"
 
       - name: 修复 glibc 2.38 兼容性
         working-directory: kernel_workspace/common
@@ -1475,22 +1469,27 @@ jobs:
           fi
    
       - name: Build kernel
+        env:
+          CI_BUILD_NUMBER: ${{ inputs.use_ci_build_number && steps.kernel_source.outputs.ci_build_id || '' }}
         run: |
           cd kernel_workspace
-          if [ -n "${CI_BUILD_NUMBER:-}" ]; then
-            export BUILD_NUMBER="$CI_BUILD_NUMBER"
-            echo "使用 BUILD_NUMBER=$BUILD_NUMBER 编译内核"
-          fi
-
           if [ -e build/build.sh ]; then
-            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+            if [ -n "$CI_BUILD_NUMBER" ]; then
+              BUILD_NUMBER="$CI_BUILD_NUMBER" LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+            else
+              LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+            fi
           else
             if grep -q "pkg_install" common/BUILD.bazel; then
               DIST_ARG="--destdir=dist"
             else
               DIST_ARG="--dist_dir=dist"
             fi
-            tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
+            if [ -n "$CI_BUILD_NUMBER" ]; then
+              BUILD_NUMBER="$CI_BUILD_NUMBER" tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=stamp --config=fast //common:kernel_aarch64_dist -- "$DIST_ARG"
+            else
+              tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
+            fi
           fi
 
       - name: Make AnyKernel3
@@ -1504,6 +1503,9 @@ jobs:
            echo "未找到 Image: $OUTDIR/Image"
            exit 1
          fi
+
+         # 打印最终内核版本，核对后缀与构建时间是否按预期生效
+         strings "$OUTDIR/Image" | grep -m1 "Linux version" || echo "未能从 Image 提取版本串"
 
          KPM_ENABLE="${{ github.event.inputs.kpm_enable }}"
          if [ "$KPM_ENABLE" = "builtin" ]; then
@@ -1525,18 +1527,6 @@ jobs:
            mv oImage Image
          else
            echo "KPM 未启用，跳过内核修补"
-         fi
-
-         # 读取最终打包的 Image；awk 读完整个管道，避免 pipefail 把 SIGPIPE 误报为提取失败。
-         BANNER=$(LC_ALL=C strings "$OUTDIR/Image" | LC_ALL=C awk '/^Linux version [0-9]+[.][0-9]+/ && !found { print; found=1 }')
-         echo "${BANNER:-未能从 Image 提取版本串}"
-         if [ -n "${CI_BUILD_NUMBER:-}" ]; then
-           RELEASE=${BANNER#Linux version }
-           RELEASE=${RELEASE%% *}
-           if [[ "$RELEASE" != *"-ab$CI_BUILD_NUMBER" ]]; then
-             echo "::error::预期内核版本以 -ab$CI_BUILD_NUMBER 结尾，Image 中读到的是 ${RELEASE:-（空）}"
-             exit 1
-           fi
          fi
 
          cd "$GITHUB_WORKSPACE"

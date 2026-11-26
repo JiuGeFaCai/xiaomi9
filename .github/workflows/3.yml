@@ -380,6 +380,15 @@ jobs:
           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
           fi
 
+      - name: Checkout sturdy-journey patches
+        if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: JiuGeFaCai/sturdy-journey
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: kernel_workspace/sturdy-journey
+          persist-credentials: false
+
       - name: Set up susfs
         if: ${{ env.KSU_SUSFS_ENABLED == 'true' }}
         run: |
@@ -391,8 +400,6 @@ jobs:
               git checkout ${{ github.event.inputs.sus_version }}
               cd ..
             fi
-
-           git clone https://github.com/JiuGeFaCai/sturdy-journey.git
 
            cd kernel_platform        
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/

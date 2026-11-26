@@ -11,6 +11,11 @@ on:
         type: string
         required: false
         default: ''
+      use_ci_build_number:
+        description: "将 CI_BUILD_ID 作为编译时的 BUILD_NUMBER（仅按 ID 构建时生效）"
+        type: boolean
+        required: false
+        default: false
       ANDROID_VERSION:
         description: "内核安卓版本"
         required: true
@@ -163,6 +168,7 @@ jobs:
          sudo mv ~/repo /usr/local/bin/repo
 
       - name: Initialize repo and sync
+        id: kernel_source
         shell: bash
         env:
           CI_BUILD_ID_INPUT: ${{ github.event.inputs.CI_BUILD_ID }}
@@ -188,6 +194,7 @@ jobs:
             cp "$CI_MANIFEST_PATH" "manifest_${CI_BUILD_ID}.xml"
             python3 "$GITHUB_WORKSPACE/.github/scripts/prepare_ci_manifest.py" \
               "manifest_${CI_BUILD_ID}.xml" "$CI_MANIFEST_PATH"
+            echo "ci_build_id=$CI_BUILD_ID" >> "$GITHUB_OUTPUT"
           else
             if [ -z "$FORMATTED_BRANCH" ]; then
               echo "::error::请填写 CI_BUILD_ID 或 ci_VERSION"
@@ -1432,18 +1439,25 @@ jobs:
           fi
    
       - name: Build kernel
+        env:
+          CI_BUILD_NUMBER: ${{ inputs.use_ci_build_number && steps.kernel_source.outputs.ci_build_id || '' }}
         run: |
-         cd kernel_workspace
-         if [ -e build/build.sh ]; then
-           LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
-         else
-           if grep -q "pkg_install" common/BUILD.bazel; then
-           DIST_ARG="--destdir=dist"
-           else
-           DIST_ARG="--dist_dir=dist"
-           fi
-           tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
-           fi
+          cd kernel_workspace
+          if [ -n "$CI_BUILD_NUMBER" ]; then
+            export BUILD_NUMBER="$CI_BUILD_NUMBER"
+            echo "使用 BUILD_NUMBER=$BUILD_NUMBER 编译内核"
+          fi
+
+          if [ -e build/build.sh ]; then
+            LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+          else
+            if grep -q "pkg_install" common/BUILD.bazel; then
+              DIST_ARG="--destdir=dist"
+            else
+              DIST_ARG="--dist_dir=dist"
+            fi
+            tools/bazel run --jobs="$(nproc)" --make_jobs="$(nproc)" --config=fast --config=stamp //common:kernel_aarch64_dist -- "$DIST_ARG"
+          fi
 
       - name: Make AnyKernel3
         run: |

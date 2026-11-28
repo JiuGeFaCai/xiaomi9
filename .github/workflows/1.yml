@@ -1288,6 +1288,12 @@ jobs:
 
           ensure_line_once "$XIAOMI_SYMBOL_LIST" "device_find_any_child"
 
+      - name: Fix KernelSU LSM registration
+        if: ${{ env.KSU_VARIANT == 'SukiSU' || env.KSU_VARIANT == 'BakaSU' }}
+        shell: bash
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/fix_ksu_lsm.py" "$GITHUB_WORKSPACE/kernel_workspace/common"
+
       - name: Add SUSFS Configuration Settings
         env:
           BAKASU_TAG: ${{ inputs.sukisu_tag }}

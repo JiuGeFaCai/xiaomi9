@@ -98,7 +98,8 @@ def patch_metadata(source, version, full):
             logical_line,
         )
         flag = re.fullmatch(
-            r"([ \t]*ccflags-y[ \t]*\+=[ \t]*)(?:-DKSU_VERSION_FULL=\S+|'-DKSU_VERSION_FULL=\S+')\s*",
+            r"([ \t]*(?:ccflags-y|CFLAGS_core/init\.o)[ \t]*\+=[ \t]*)"
+            r"(?:-DKSU_VERSION_FULL=\S+|'-DKSU_VERSION_FULL=\S+')\s*",
             logical_line,
         )
         if assignment:
@@ -127,14 +128,19 @@ def set_version(repo_root, ref, version="", suffix=""):
     version = "".join(version.split())
     if version and not re.fullmatch(r"[0-9]+", version):
         raise ValueError("SukiSU version override must contain only digits")
+    kernel = repo_root / "kernel"
+    kbuild = kernel / "Kbuild"
+    version_fragment = kernel / "kbuild-config/version.mk"
     sources = {
         path: path.read_text()
-        for path in (repo_root / "kernel/Kbuild", repo_root / "kernel/Makefile") if path.is_file()
+        for path in (kbuild, version_fragment, kernel / "Makefile") if path.is_file()
     }
     path = next((path for path, source in sources.items() if VERSION_ASSIGNMENT.search(source)), None)
     if path is None:
         raise ValueError("SukiSU KSU_VERSION definition not found")
-    metadata = read_metadata(repo_root, path)
+    # Kbuild sets MDIR and loads the manager package alongside version.mk.
+    build_file = kbuild if path == version_fragment else path
+    metadata = read_metadata(repo_root, build_file)
     number = version or metadata.get("KSU_VERSION", "")
     if not re.fullmatch(r"[0-9]+", number):
         raise ValueError(f"{path}: invalid upstream KSU_VERSION: {number!r}")

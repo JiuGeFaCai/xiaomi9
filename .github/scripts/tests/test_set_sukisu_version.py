@@ -93,7 +93,10 @@ class SukiSUVersionTest(unittest.TestCase):
             '#include <stdio.h>\nint main(void) { printf("%d\\n%s\\n", KSU_VERSION, KSU_VERSION_FULL); }\n'
         )
         makefile = f"include kernel/{self.path.name}\n"
-        makefile += ".PHONY: version_test\nversion_test:\n\t$(CC) $(ccflags-y) kernel/version.c -o version-test\n"
+        makefile += (
+            ".PHONY: version_test\nversion_test:\n"
+            "\t$(CC) $(ccflags-y) $(CFLAGS_core/init.o) kernel/version.c -o version-test\n"
+        )
         subprocess.run(
             ["make", "--no-print-directory", "-s", "-f", "-", "version_test", f"CC={compiler}"],
             cwd=self.repo, input=makefile, text=True, capture_output=True, check=True,
@@ -119,6 +122,34 @@ class SukiSUVersionTest(unittest.TestCase):
                 self.assertEqual(metadata["full"], "v3.0.0-1234abcd@builtin")
                 self.assertEqual(self.build_version(), (expected, metadata["full"]))
         self.assertIn("--connect-timeout\n5\n--max-time\n10\n", self.curl_log.read_text())
+
+    def test_split_kbuild_pins_versions_in_per_object_flags(self):
+        kbuild = (
+            "MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))\n"
+            "KSU_KBUILD_DIR := $(MDIR)/kbuild-config\n"
+            "include $(KSU_KBUILD_DIR)/version.mk\n"
+            "include $(KSU_KBUILD_DIR)/manager.mk\n"
+        )
+        self.configure(kbuild)
+        fragments = self.kernel / "kbuild-config"
+        fragments.mkdir()
+        (fragments / "manager.mk").write_text("KSU_PACKAGE_NAME := com.sukisu.nova\n")
+        (fragments / "version.mk").write_text(
+            UPSTREAM.split("\n", 1)[1]
+            .replace("REPO_NAME := SukiSU-Nova", "REPO_NAME := SukiSU")
+            .replace("VERSION_OFFSET := 4001", "VERSION_OFFSET := 996")
+            .replace("- $(VERSION_OFFSET)", "+ $(VERSION_OFFSET)")
+            .replace("KSU_PACKAGE_NAME ?= com.sukisu.nova\n", "")
+            .replace("ccflags-y", "CFLAGS_core/init.o")
+        )
+
+        for override, suffix, version in (("", "", 35997), ("0035000", "调试 #1", 35000)):
+            with self.subTest(override=override, suffix=suffix):
+                metadata = sukisu_version.set_version(self.repo, "builtin", override, suffix)
+                full = "v3.0.0-1234abcd@builtin" + (f"-{suffix}" if suffix else "")
+                self.assertEqual(metadata, {"name": "SukiSU_Nova", "version": version, "full": full})
+                self.assertEqual(self.build_version(), (version, full))
+        self.assertEqual(self.path.read_text(), kbuild)
 
     def test_old_ultra_keeps_its_version_formula_and_package(self):
         source = (UPSTREAM.replace("VERSION_BASE := 30000", "VERSION_BASE := 40000")
